@@ -1,9 +1,10 @@
 // @ts-nocheck
 // CollexIQ — Single-Page App (React + Tailwind)
-// Label: V4.3 (Runtime Fix) — Corrected a runtime error by setting the production backend URL.
+// Label: V4.4 (Payment Success Flow) — Implements persistent login and a payment success redirect page.
 // Notes:
-// - Fixed a 'process is not defined' error by hardcoding the live backend URL.
-// - This change connects the live front-end to the live back-end server.
+// - User session is now saved to localStorage to persist login state across redirects.
+// - A new /payment-success route is handled to show a confirmation message.
+// - After 3 seconds on the success page, the user is automatically redirected to the dashboard.
 import React, { useEffect, useMemo, useState } from "react";
 
 /*************************************
@@ -18,12 +19,6 @@ const COLORS = {
   textDim: "#cbd5e1",
   amber: "#f59e0b",
   blue: "#60a5fa",
-};
-
-const STRIPE_LINKS = {
-  starter: "https://buy.stripe.com/5kQ3cvg82fAeaGkfO6fIs04",
-  pro: "https://buy.stripe.com/eVq3cv1d81JobKogSafIs06",
-  agency: "https://buy.stripe.com/bJe14n9JEfAe7u8dFYfIs07",
 };
 
 // This is the URL of your live backend server on Render.
@@ -244,7 +239,7 @@ function Header({ onScrollTo, onLogin, loggedIn, onLogout, onOpenDashboard, show
         <div className="hidden md:flex items-center gap-2">
           {!loggedIn ? (
             <>
-              <Button variant="ghost" size="md" onClick={onLogin}> <FacebookIcon className="w-5 h-5 mr-2" /> Login with Facebook</Button>
+              <Button variant="outline" size="md" onClick={onLogin}> <FacebookIcon className="w-5 h-5 mr-2" /> Login with Facebook</Button>
               <Button onClick={() => onScrollTo("pricing")}>Start Free Trial</Button>
             </>
           ) : (
@@ -456,11 +451,12 @@ function DocsPage(){
  * Pricing
  *************************************/
 const PRICING_TIERS = [
-  { name:"Starter", price:"$19", period:"/mo", highlight:false, link:STRIPE_LINKS.starter, features:["500 members/mo","Daily sync","CSV export"] },
-  { name:"Pro", price:"$39", period:"/mo", highlight:true, link:STRIPE_LINKS.pro, features:["2,000 members/mo","Hourly sync","Sheets + Webhook"] },
-  { name:"Agency", price:"$99", period:"/mo", highlight:false, link:STRIPE_LINKS.agency, features:["5,000 members/mo","15-min sync","Priority support"] },
+  { id: "price_starter", name:"Starter", price:"$19", period:"/mo", highlight:false, features:["500 members/mo","Daily sync","CSV export"] },
+  { id: "price_pro", name:"Pro", price:"$39", period:"/mo", highlight:true, features:["2,000 members/mo","Hourly sync","Sheets + Webhook"] },
+  { id: "price_agency", name:"Agency", price:"$99", period:"/mo", highlight:false, features:["5,000 members/mo","15-min sync","Priority support"] },
 ];
-function Pricing(){
+
+function Pricing({ onChoosePlan, loggedIn }){
   return (
     <section id="pricing" className="py-20" style={{ background: COLORS.baseDeep }}>
       <div className="max-w-7xl mx-auto px-4">
@@ -491,11 +487,13 @@ function Pricing(){
                     <li key={idx} className="flex items-center gap-3"><Check className="w-5 h-5 text-green-400" /> {f}</li>
                   ))}
                 </ul>
-                <a href={t.link} target="_blank" rel="noopener noreferrer" className="mt-8">
-                  <Button className="w-full" variant={t.highlight ? "solid" : "outline"}>
-                    Choose {t.name}
-                  </Button>
-                </a>
+                <Button 
+                  className="w-full mt-8" 
+                  variant={t.highlight ? "solid" : "outline"}
+                  onClick={() => onChoosePlan(t)}
+                >
+                  Choose {t.name}
+                </Button>
               </CardContent>
             </Card>
           ))}
@@ -689,6 +687,31 @@ function Reviews(){
 }
 
 /*************************************
+ * Payment Success Page
+ *************************************/
+function PaymentSuccessPage({ onGoToDashboard }) {
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            onGoToDashboard();
+        }, 3000); // 3-second delay
+        return () => clearTimeout(timer);
+    }, [onGoToDashboard]);
+
+    return (
+        <div className="flex flex-col items-center justify-center text-center py-40 max-w-2xl mx-auto">
+            <div className="w-24 h-24 rounded-full bg-green-500/20 flex items-center justify-center mb-8 ring-4 ring-green-500/30">
+                <Check className="w-12 h-12 text-green-400" />
+            </div>
+            <h1 className="text-4xl font-bold">Payment Successful!</h1>
+            <p className="mt-4 text-lg" style={{color: COLORS.textDim}}>
+                Thank you for your purchase. Your account has been upgraded. You will be redirected to your dashboard shortly.
+            </p>
+        </div>
+    );
+}
+
+
+/*************************************
  * Dashboard (after login)
  *************************************/
 function exportToCSV(data, filename) {
@@ -763,7 +786,7 @@ function Dashboard({ user }) {
                                         <CardTitle>Current Plan</CardTitle>
                                     </CardHeader>
                                     <CardContent className="flex items-center justify-between">
-                                        <p className="text-2xl font-semibold">Pro (Trial Active)</p>
+                                        <p className="text-2xl font-semibold">{user.plan || 'Free'}</p>
                                         <Button variant="solid" size="sm" onClick={() => document.getElementById('pricing')?.scrollIntoView()}>Upgrade</Button>
                                     </CardContent>
                                 </Card>
@@ -837,25 +860,27 @@ export default function App() {
     const [user, setUser] = useState(null);
     const [showDashboard, setShowDashboard] = useState(false);
     const [showBackToTop, setShowBackToTop] = useState(false);
+    const [view, setView] = useState('home'); // home, dashboard, payment_success
 
     const scrollTo = useScrollTo();
 
     const handleLogin = () => {
-        // Redirect to the backend which will handle the Facebook login flow
         window.location.href = `${BACKEND_URL}/api/facebook/login`;
     };
 
     const handleLogout = () => {
+        localStorage.removeItem('collexiq_user');
         setLoggedIn(false);
         setUser(null);
         setShowDashboard(false);
-        // Clean up URL params
+        setView('home');
         window.history.replaceState({}, document.title, window.location.pathname);
     };
 
     const handleOpenDashboard = () => {
         if (loggedIn) {
             setShowDashboard(true);
+            setView('dashboard');
         } else {
             handleLogin();
         }
@@ -863,23 +888,65 @@ export default function App() {
     
     const handleNavAndScroll = (id) => {
         setShowDashboard(false);
+        setView('home');
         setTimeout(() => scrollTo(id), 50);
+    };
+    
+    const handleChoosePlan = async (plan) => {
+        if (!loggedIn || !user) {
+            // If user is not logged in, prompt them to login first.
+            // You can store the selected plan and redirect after login.
+            alert("Please log in first to choose a plan.");
+            return;
+        }
+        
+        try {
+            const response = await fetch(`${BACKEND_URL}/api/create-checkout-session`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ planId: plan.id, userId: user.id, planName: plan.name }),
+            });
+            const session = await response.json();
+            if (session.url) {
+                window.location.href = session.url;
+            }
+        } catch (error) {
+            console.error("Error creating checkout session:", error);
+            alert("Could not connect to the payment gateway. Please try again later.");
+        }
     };
 
     useEffect(() => {
-        // This effect runs once when the component mounts to check for login success
+        // This effect runs once on component mount
         const urlParams = new URLSearchParams(window.location.search);
+        
+        if (window.location.pathname === '/payment-success') {
+            setView('payment_success');
+            window.history.replaceState({}, document.title, '/');
+        }
+
+        const storedUser = localStorage.getItem('collexiq_user');
+
         if (urlParams.get('login_success') === 'true') {
             try {
                 const userData = JSON.parse(decodeURIComponent(urlParams.get('user')));
+                localStorage.setItem('collexiq_user', JSON.stringify(userData));
                 setUser(userData);
                 setLoggedIn(true);
                 setShowDashboard(true);
-
-                // Clean up the URL so the params don't stay there on refresh
+                setView('dashboard');
                 window.history.replaceState({}, document.title, window.location.pathname);
             } catch (e) {
                 console.error("Failed to parse user data from URL", e);
+            }
+        } else if (storedUser) {
+             try {
+                const userData = JSON.parse(storedUser);
+                setUser(userData);
+                setLoggedIn(true);
+            } catch (e) {
+                console.error("Failed to parse user data from localStorage", e);
+                localStorage.removeItem('collexiq_user');
             }
         }
 
@@ -900,6 +967,28 @@ export default function App() {
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
 
+    const renderCurrentView = () => {
+        if (view === 'payment_success') {
+            return <PaymentSuccessPage onGoToDashboard={handleOpenDashboard} />;
+        }
+        if (showDashboard) {
+            return <Dashboard user={user}/>;
+        }
+        return (
+            <main>
+                <Hero onCTAPricing={() => scrollTo('pricing')} onCTATrial={() => scrollTo('pricing')} />
+                <HowItWorks />
+                <Integrations />
+                <DocsPage />
+                <Reviews />
+                <Pricing onChoosePlan={handleChoosePlan} loggedIn={loggedIn}/>
+                <Security />
+                <FAQ />
+                <Contact />
+            </main>
+        );
+    }
+
     return (
         <>
             <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');`}</style>
@@ -915,21 +1004,7 @@ export default function App() {
                     onNavAndScroll={handleNavAndScroll}
                 />
 
-                {showDashboard ? (
-                    <Dashboard user={user}/>
-                ) : (
-                    <main>
-                        <Hero onCTAPricing={() => scrollTo('pricing')} onCTATrial={() => scrollTo('pricing')} />
-                        <HowItWorks />
-                        <Integrations />
-                        <DocsPage />
-                        <Reviews />
-                        <Pricing />
-                        <Security />
-                        <FAQ />
-                        <Contact />
-                    </main>
-                )}
+                {renderCurrentView()}
 
                 <Footer onScrollTo={scrollTo} />
                 
