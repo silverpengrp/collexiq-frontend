@@ -1,1025 +1,683 @@
-// @ts-nocheck
-// CollexIQ — Single-Page App (React + Tailwind)
-// Label: V4.4 (Payment Success Flow) — Implements persistent login and a payment success redirect page.
-// Notes:
-// - User session is now saved to localStorage to persist login state across redirects.
-// - A new /payment-success route is handled to show a confirmation message.
-// - After 3 seconds on the success page, the user is automatically redirected to the dashboard.
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect } from 'react';
+import Chart from 'chart.js/auto';
 
-/*************************************
- * Theme & constants
- *************************************/
-const COLORS = {
-  base: "#0b1b33",
-  baseDeep: "#081427",
-  card: "#0f2140",
-  border: "#1f3355",
-  text: "#ffffff",
-  textDim: "#cbd5e1",
-  amber: "#f59e0b",
-  blue: "#60a5fa",
-};
+function App() {
+  useEffect(() => {
+    // This code runs after the component mounts, similar to DOMContentLoaded
 
-// This is the URL of your live backend server on Render.
-const BACKEND_URL = "https://collexiq-backend.onrender.com";
-
-/*************************************
- * Data
- *************************************/
-const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-function makeHeroData(){ return months.map((m,i)=>({ month:m, emails: 20 + ((i*7)%60), syncs: 15 + ((i*11)%50) })); }
-function makeDashData(){ return months.map((m,i)=>({ month:m, emails: (i+1)*15 + ((i%3)*10) })); }
-
-const testimonials = [
-  { name: "Alex P.", role: "Head of Ops, Fintech", img: "https://i.pravatar.cc/96?img=12", quote: "CollexIQ streamlined our collections workflows. The dashboard is crystal clear and our team ramped up in days." },
-  { name: "Morgan S.", role: "Founder, SaaS", img: "https://i.pravatar.cc/96?img=32", quote: "From mapping fields to syncing with our CRM, the setup was minutes. Billing is predictable and fair." },
-  { name: "Priya N.", role: "RevOps Lead", img: "https://i.pravatar.cc/96?img=5", quote: "The Stripe billing and export compliance story gave our board instant confidence. We shipped faster." },
-  { name: "Diego R.", role: "Collections Manager", img: "https://i.pravatar.cc/96?img=22", quote: "Our agents finally have one clean view. Fewer manual exports and CSV headaches." },
-  { name: "Sam T.", role: "Growth", img: "https://i.pravatar.cc/96?img=15", quote: "We turned on the trial and upgraded the same week. Great docs, simple UI, helpful support." },
-  { name: "Lin M.", role: "Engineer", img: "https://i.pravatar.cc/96?img=68", quote: "The webhook plus Zapier combo is clutch. We plugged into our stack without backend changes." },
-];
-
-const recentCaptures = [
-  { email: "jane@example.com", date: "2025-09-01" },
-  { email: "mark@company.com", date: "2025-09-02" },
-  { email: "sofia@domain.org", date: "2025-09-03" },
-  { email: "user@web.com", date: "2025-09-03" },
-  { email: "test@demo.co", date: "2025-09-04" },
-];
-
-/*************************************
- * Icon shims (lucide-like)
- *************************************/
-function Icon({ d, size=20, strokeWidth=2, fill="none", stroke="currentColor", ...rest }){
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...rest}>
-      <path d={d}/>
-    </svg>
-  );
-}
-const Star = (p)=> <Icon {...p} d="M12 2l3 7 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z" fill={COLORS.amber} stroke="none" />;
-const Menu = (p)=> <Icon {...p} d="M3 6h18M3 12h18M3 18h18"/>;
-const BarChart2 = (p)=> <Icon {...p} d="M3 3v18M7 13v8M11 9v12M15 5v16M19 1v20"/>;
-const Database = (p)=> <Icon {...p} d="M4 6c0-2 16-2 16 0s-16 2-16 0zm0 6c0-2 16-2 16 0s-16 2-16 0zm0 6c0-2 16-2 16 0s-16 2-16 0"/>;
-const Layers = (p)=> <Icon {...p} d="M12 2l9 5-9 5-9-5 9-5zm-9 9l9 5 9-5"/>;
-const Check = (p)=> <Icon {...p} d="M20 6L9 17l-5-5"/>;
-const Lock = (p)=> <Icon {...p} d="M6 10V8a6 6 0 1112 0v2M5 10h14v10H5z"/>;
-const LogOut = (p)=> <Icon {...p} d="M9 21H3v-6M3 21l9-9M21 12H12"/>;
-const FileDown = (p)=> <Icon {...p} d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/>;
-const UserCircle = (p)=> <Icon {...p} d="M12 12a5 5 0 100-10 5 5 0 000 10zm-8 10a8 8 0 1116 0z"/>;
-const ArrowUp = (p)=> <Icon {...p} d="M12 19V5m0 0l-6 6m6-6l6 6"/>;
-const ChevronDown = (p) => <Icon {...p} d="m6 9 6 6 6-6"/>;
-const Zap = (p)=> <Icon {...p} d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/>;
-const CreditCard = (p)=> <Icon {...p} d="M2 6h20v12H2z M2 10h20"/>;
-const Settings = (p)=> <Icon {...p} d="M12 8a4 4 0 100 8 4 4 0 000-8z M3 12h3M18 12h3M12 3v3M12 18v3"/>;
-const LayoutDashboard = (p)=> <Icon {...p} d="M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z"/>;
-const FacebookIcon = (p) => <Icon {...p} fill="currentColor" stroke="none" d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />;
-const InstagramIcon = (p) => <Icon {...p} fill="none" stroke="currentColor" d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5z M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0 M16.5 7.5v.01"/>;
-const XSocialIcon = (p) => <Icon {...p} fill="currentColor" stroke="none" d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 7.184L18.901 1.153zM17.61 20.644h2.039L6.486 3.24H4.298l13.312 17.404z" />;
-const LinkedInIcon = (p) => <Icon {...p} fill="currentColor" stroke="none" d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6zM2 9h4v12H2zM4 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" />;
-
-const GoogleSheetsIcon = (p) => <svg {...p} viewBox="0 0 32 32"><g fill="none" fillRule="evenodd"><path fill="#20A464" d="M20 2H10a2 2 0 0 0-2 2v24a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7l-5-5z"/><path fill="#188350" d="M22 7h-5V2l5 5z"/><path fill="#fff" d="M11 14h10v2H11zm0 4h10v2H11zm0 4h5v2h-5z"/></g></svg>;
-const MailchimpIcon = (p) => <svg {...p} viewBox="0 0 40 40"><path d="M38.6 22.4c-.8-1-2-1.6-3.3-1.6-1.1 0-2.1.4-2.9 1.2s-1.2 1.8-1.2 2.9c0 1.3 1.1 3.2 1.4 3.7l.5.6c.3.4.7.6 1.1.6.4 0 .8-.2 1.1-.6.3-.4 2.1-2.4 2.1-4.2.1-1.3-.6-2.5-1.8-3.4zm-1.8 4.8c-.3-.4-1.1-2-1.1-2.9 0-.6.2-1.2.7-1.6.5-.4 1-.7 1.6-.7s1.2.2 1.6.7c.4.4.7 1 .7 1.6 0 1.2-1.2 2.9-1.6 3.4-.1.1-.3.1-.4 0-.1 0-.3-.1-.5-.5zM22.5 13c-2.3-1.6-5-2.6-8-2.6-4.6 0-8.8 2.5-11.4 6.4-1.2 1.9-1.9 4-1.9 6.3 0 5.4 3.4 10 8.1 11.4 1.2.3 2.4.5 3.6.5 1.5 0 3-.4 4.4-.9 3.5-1.5 6-4.4 6.9-8H24c-1.7 0-3-1.3-3-3s1.3-3 3-3h3.5c-.1-1.2-.4-2.4-.9-3.5L25 21.3c-1 1.2-2.5 2-4.2 2s-3.2-.8-4.2-2c-1-1.2-1.6-2.8-1.6-4.4 0-1.7.6-3.2 1.6-4.4 1-1.2 2.5-2 4.2-2s3.2.8 4.2 2l1.6 1.8c.4-1.1.6-2.2.6-3.4 0-.7-.1-1.4-.2-2.1z" fill="#FFE01B"/><path d="M22.4 13.1c-2.3-1.6-5-2.6-8-2.6-4.6 0-8.8 2.5-11.4 6.4-1.2 1.9-1.9 4-1.9 6.3 0 5.4 3.4 10 8.1 11.4 1.2.3 2.4.5 3.6.5 1.5 0 3-.4 4.4-.9 3.5-1.5 6-4.4 6.9-8H24c-1.7 0-3-1.3-3-3s1.3-3 3-3h3.5c-.1-1.2-.4-2.4-.9-3.5L25 21.3c-1 1.2-2.5 2-4.2 2s-3.2-.8-4.2-2c-1-1.2-1.6-2.8-1.6-4.4 0-1.7.6-3.2 1.6-4.4 1-1.2 2.5-2 4.2-2s3.2.8 4.2 2l1.6 1.8c.4-1.1.6-2.2.6-3.4.1-.7 0-1.4-.1-2.1z" fill="#241C15" opacity=".1"/></svg>;
-const ZapierIcon = (p) => <svg {...p} viewBox="0 0 24 24"><path d="M22 12h-7.58l4.47-5.59L17.31 5 12 11.33V2h-2v9.33L4.69 5 3.11 6.41 7.58 12H0v2h7.58l-4.47 5.59L4.69 21 10 14.67V24h2v-9.33L17.31 21l1.58-1.41L14.42 14H22z" fill="#FF4A00"/></svg>;
-const WebhookIcon = (p) => <svg {...p} viewBox="0 0 24 24"><path fill="none" stroke="#8B5CF6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path fill="#8B5CF6" d="M22 4L12 14.01l-3-3"/></svg>;
-
-const integrations = [
-  { name: "Google Sheets", icon: <GoogleSheetsIcon className="w-10 h-10" /> },
-  { name: "Mailchimp", icon: <MailchimpIcon className="w-10 h-10" /> },
-  { name: "Zapier", icon: <ZapierIcon className="w-10 h-10" /> },
-  { name: "Webhook", icon: <WebhookIcon className="w-10 h-10" /> },
-];
-
-/*************************************
- * Tiny UI primitives
- *************************************/
-function cn(){ return Array.from(arguments).filter(Boolean).join(" "); }
-function Button(props){ const { variant="solid", size="md", className, style, children, ...rest } = props; const base="inline-flex items-center justify-center rounded-lg font-semibold tracking-wide transition-transform duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 active:scale-[0.98]"; const sizes={ sm:"px-4 py-2 text-sm", md:"px-6 py-2.5 text-base", lg:"px-8 py-3.5 text-lg", icon:"p-2.5"}; const variants={ solid:"bg-amber-500 text-slate-900 hover:bg-amber-400", outline:"border-2 border-amber-500 text-amber-500 hover:bg-amber-500 hover:text-slate-900", ghost:"text-white hover:bg-white/10"}; return (<button className={cn(base, sizes[size], variants[variant], className||"")} style={style} {...rest}>{children}</button>); }
-const Card = React.forwardRef((props, ref) => {
-    const { className, style, children, ...rest } = props;
-    return (
-        <div ref={ref} className={cn("rounded-2xl border backdrop-blur-sm", className || "")} style={{ ...style, background: "rgba(15, 33, 64, 0.6)", borderColor: COLORS.border }} {...rest}>
-            {children}
-        </div>
-    );
-});
-function CardHeader(props){ return <div className={cn("p-6", props.className||"")}>{props.children}</div>; }
-function CardTitle(props){ return <h3 className={cn("text-xl font-bold", props.className||"")}>{props.children}</h3>; }
-function CardDescription(props){ return <p className={cn("text-base opacity-80 mt-1", props.className||"")}>{props.children}</p>; }
-function CardContent(props){ return <div className={cn("p-6", props.className||"")} style={props.style}>{props.children}</div>; }
-function Input(props){ const { className, style, ...rest } = props; return <input className={cn("w-full rounded-lg border-2 px-4 py-2.5 text-base bg-transparent focus:ring-2 focus:ring-amber-500 focus:border-amber-500", className||"")} style={{borderColor: COLORS.border}} {...rest} />; }
-
-/*************************************
- * Utilities
- *************************************/
-function useScrollTo(){ return function(id){ const el = document.getElementById(id); if(el) el.scrollIntoView({behavior:"smooth", block:"start"}); }; }
-
-/*************************************
- * Logo
- *************************************/
-function Logo(props) {
-    const { size = 180 } = props || {};
-    const viewBoxWidth = 175;
-    const viewBoxHeight = 48;
-    const width = size * (viewBoxWidth / 180);
-    const height = size * (viewBoxHeight / 180);
-    const textSize = 28;
-
-    return (
-        <div className="inline-flex items-center">
-            <svg width={width} height={height} viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`} aria-hidden="true">
-                <defs>
-                    <linearGradient id="gradIQ" x1="0" y1="0" x2="1" y2="1">
-                        <stop offset="0%" stopColor={COLORS.amber} />
-                        <stop offset="100%" stopColor="#fcd34d" />
-                    </linearGradient>
-                </defs>
-                <g>
-                    <path d="M38 24C38 31.73 31.73 38 24 38S10 31.73 10 24 16.27 10 24 10" fill="none" stroke="url(#gradIQ)" strokeWidth="8" strokeLinecap="round"/>
-                    <circle cx="24" cy="24" r="6" fill={COLORS.blue} />
-                </g>
-                <text x="58" y={viewBoxHeight / 2 + textSize / 3.5} style={{ fontSize: textSize, fontWeight: 800 }}>
-                    <tspan fill={COLORS.text}>Collex</tspan>
-                    <tspan fill="url(#gradIQ)">IQ</tspan>
-                </text>
-            </svg>
-            <span className="sr-only">CollexIQ</span>
-        </div>
-    );
-}
-
-/*************************************
- * Minimal SVG Line Chart (Recharts-like)
- *************************************/
-function LineChartSVG({ data, lines, maxY: maxYValue }) {
-    const labels = data.map(d => d.month);
-    const width = 820, height = 240;
-    const pad = { l: 56, r: 24, t: 16, b: 28 };
-    const iw = width - pad.l - pad.r, ih = height - pad.t - pad.b;
-    const maxY = maxYValue || Math.max(1, ...lines.flatMap(l => data.map(d => d[l.key])));
-    const stepX = iw / (labels.length - 1 || 1);
-
-    function getCoords(v, i) {
-        const x = pad.l + stepX * i;
-        const y = pad.t + (1 - (v / maxY)) * ih;
-        return { x, y };
+    // Mobile menu toggle
+    const menuButton = document.getElementById('mobile-menu-button');
+    const mobileMenu = document.getElementById('mobile-menu');
+    if (menuButton && mobileMenu) {
+      const toggleMenu = () => {
+        const isExpanded = menuButton.getAttribute('aria-expanded') === 'true';
+        menuButton.setAttribute('aria-expanded', !isExpanded);
+        mobileMenu.classList.toggle('hidden');
+      };
+      menuButton.addEventListener('click', toggleMenu);
+      
+      // Cleanup function to remove event listener
+      return () => menuButton.removeEventListener('click', toggleMenu);
     }
 
-    return (
-        <svg className="w-full" viewBox={`0 0 ${width} ${height}`} aria-label="chart">
-            <defs>
-                <linearGradient id="amberGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={COLORS.amber} stopOpacity={0.4} />
-                    <stop offset="100%" stopColor={COLORS.amber} stopOpacity={0} />
-                </linearGradient>
-            </defs>
-            {[0, 0.25, 0.5, 0.75, 1].map((t, idx) => {
-                const y = pad.t + t * ih;
-                return (
-                    <g key={idx}>
-                        <line x1={pad.l} y1={y} x2={width - pad.r} y2={y} stroke={COLORS.border} strokeDasharray="3 3" />
-                        <text x={8} y={y + 3} fontSize="10" fill={COLORS.textDim}>{Math.round(maxY * (1 - t))}</text>
-                    </g>
-                );
-            })}
-            {labels.map((lab, i) => {
-                const x = pad.l + stepX * i;
-                return <text key={lab} x={x} y={height - 6} fontSize="12" textAnchor="middle" fill={COLORS.textDim}>{lab}</text>;
-            })}
-            {lines.map((l, lineIdx) => {
-                const points = data.map((d, i) => getCoords(d[l.key], i));
-                const pathData = points.map(p => `${p.x},${p.y}`).join(" ");
-                const areaPathData = `M${points[0].x},${height - pad.b} L${pathData} L${points[points.length - 1].x},${height - pad.b} Z`;
+    // HERO LINE CHART (Chart.js)
+    const canvas = document.getElementById('followerChart');
+    let followerChart = null;
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
 
-                return (
-                    <g key={lineIdx}>
-                        {l.color === COLORS.amber && <path d={areaPathData} fill="url(#amberGradient)" />}
-                        <polyline fill="none" stroke={l.color} strokeWidth={l.w || 2.5} points={pathData} strokeLinecap="round"/>
-                        {points.map((p, pointIdx) => ( <circle key={pointIdx} cx={p.x} cy={p.y} r="3" fill={l.color} stroke={COLORS.base} strokeWidth="2" /> ))}
-                    </g>
-                );
-            })}
-        </svg>
-    );
-}
+      // Panel gradient plugin
+      const panelBG = {
+          id: 'panelBG',
+          beforeDraw(chart) {
+              const {ctx, chartArea} = chart;
+              if (!chartArea) return;
+              const {left, top, width, height} = chartArea;
+              const g = ctx.createLinearGradient(0, top, 0, top + height);
+              g.addColorStop(0, 'rgba(99, 102, 241, 0.08)');
+              g.addColorStop(1, 'rgba(236, 72, 153, 0.06)');
+              ctx.save();
+              ctx.fillStyle = g;
+              ctx.fillRect(left, top, width, height);
+              ctx.restore();
+          }
+      };
 
-/*************************************
- * Header
- *************************************/
-function Header({ onScrollTo, onLogin, loggedIn, onLogout, onOpenDashboard, showDashboard, onNavAndScroll, user }){
-  const [open, setOpen] = useState(false);
-  
-  const handleScrollOrNav = (id) => {
-      if (showDashboard && id !== 'dashboard') {
-          onNavAndScroll(id);
-      } else if (id === 'dashboard') {
-          onOpenDashboard();
-      } else {
-          onScrollTo(id);
-      }
-      setOpen(false);
-  };
+      const orangeFill = ctx.createLinearGradient(0, 0, 0, 160);
+      orangeFill.addColorStop(0, 'rgba(245, 158, 11, 0.18)');
+      orangeFill.addColorStop(1, 'rgba(245, 158, 11, 0.00)');
 
-  const navItems = loggedIn 
-    ? [["Dashboard", "dashboard"], ["Integrations", "integrations"], ["Pricing", "pricing"], ["Contact", "contact"]]
-    : [["Solutions", "solutions"], ["Integrations", "integrations"], ["Pricing", "pricing"], ["FAQ", "faq"], ["Contact", "contact"]];
+      const blueFill = ctx.createLinearGradient(0, 0, 0, 160);
+      blueFill.addColorStop(0, 'rgba(96, 165, 250, 0.20)');
+      blueFill.addColorStop(1, 'rgba(96, 165, 250, 0.00)');
 
-  return (
-    <header className="sticky top-0 z-50 backdrop-blur-lg border-b" style={{ background: "rgba(11, 27, 51, 0.8)", borderColor: COLORS.border }}>
-      <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between" style={{ color: COLORS.text }}>
-        <div className="flex items-center gap-2 cursor-pointer" onClick={() => (loggedIn ? onOpenDashboard() : onScrollTo("hero"))}>
-          <Logo size={160} />
-        </div>
-        <nav className="hidden md:flex items-center gap-6 text-base">
-           {navItems.map(([label, id]) => (
-                <button key={label} className="hover:text-amber-400 transition-colors" onClick={() => handleScrollOrNav(id)}>{label}</button>
-            ))}
-        </nav>
-        <div className="hidden md:flex items-center gap-2">
-          {!loggedIn ? (
-            <>
-              <Button variant="outline" size="md" onClick={onLogin}> <FacebookIcon className="w-5 h-5 mr-2" /> Login with Facebook</Button>
-              <Button onClick={() => onScrollTo("pricing")}>Start Free Trial</Button>
-            </>
-          ) : (
-            <>
-              <div className="hidden lg:flex items-center text-sm opacity-80"><UserCircle className="w-5 h-5 mr-2" /> {user.email}</div>
-              <Button variant="outline" size="sm" onClick={onLogout} style={{ borderColor: COLORS.border }}><LogOut className="w-4 h-4 mr-2" /> Logout</Button>
-            </>
-          )}
-        </div>
-        <Button className="md:hidden" variant="ghost" size="icon" onClick={() => setOpen(v => !v)}><Menu className="w-6 h-6" /></Button>
-      </div>
-      {open && (
-        <div className="md:hidden px-4 pb-4 border-t" style={{ borderColor: COLORS.border }}>
-          <div className="grid gap-2 pt-2">
-             {navItems.map(([label, id]) => (
-                <Button key={id} variant="ghost" className="justify-start text-lg py-3" style={{ color: COLORS.text }} onClick={() => handleScrollOrNav(id)}>{label}</Button>
-            ))}
-            <div className="flex gap-2 mt-2">
-              {!loggedIn ? (
-                <>
-                  <Button className="flex-1" variant="outline" onClick={onLogin}><FacebookIcon className="w-5 h-5 mr-2" /> Login</Button>
-                  <Button className="flex-1" onClick={() => onScrollTo("pricing")}>Start Trial</Button>
-                </>
-              ) : (
-                <Button className="flex-1" variant="outline" onClick={onLogout}><LogOut className="w-4 h-4 mr-2" /> Logout</Button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-    </header>
-  );
-}
+      followerChart = new Chart(ctx, {
+          type: 'line',
+          data: {
+              labels: ['W1','W2','W3','W4','W5','W6'],
+              datasets: [
+                  {
+                      label: 'Follower Growth',
+                      data: [19, 25, 38, 45, 57, 76],
+                      borderColor: '#f59e0b',
+                      backgroundColor: orangeFill,
+                      fill: true,
+                      tension: 0.2,
+                      borderWidth: 3,
+                      pointRadius: 4,
+                      pointHoverRadius: 5,
+                      pointBackgroundColor: '#f59e0b',
+                      pointBorderColor: '#0f172a',
+                      pointBorderWidth: 2,
+                      order: 2
+                  },
+                  {
+                      label: 'Engagement',
+                      data: [19, 35, 57, 19, 57, 28],
+                      borderColor: '#60a5fa',
+                      backgroundColor: blueFill,
+                      fill: true,
+                      tension: 0.45,
+                      borderWidth: 3,
+                      pointRadius: 4,
+                      pointHoverRadius: 5,
+                      pointBackgroundColor: '#60a5fa',
+                      pointBorderColor: '#0f172a',
+                      pointBorderWidth: 2,
+                      order: 1
+                  }
+              ]
+          },
+          options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                  legend: { display: false },
+                  tooltip: {
+                      backgroundColor: '#0b1220',
+                      borderColor: '#334155',
+                      borderWidth: 1,
+                      titleColor: '#e5e7eb',
+                      bodyColor: '#cbd5e1',
+                      padding: 10,
+                      mode: 'index',
+                      intersect: false
+                  }
+              },
+              scales: {
+                  x: {
+                      grid: { display: false },
+                      ticks: { color: '#94a3b8', font: { size: 10 } }
+                  },
+                  y: {
+                      beginAtZero: true,
+                      suggestedMax: 80,
+                      ticks: {
+                          stepSize: 20,
+                          color: '#94a3b8',
+                          font: { size: 10 }
+                      },
+                      grid: {
+                          color: '#1f2937',
+                          borderDash: [5,5],
+                          drawBorder: false
+                      }
+                  }
+              }
+          },
+          plugins: [panelBG]
+      });
+    }
 
-/*************************************
- * HERO
- *************************************/
-function Hero({ onCTAPricing, onCTATrial }){
-  const data = useMemo(()=> makeHeroData(), []);
-  return (
-    <section id="hero" className="relative overflow-hidden">
-       <div className="pointer-events-none absolute inset-0 z-0" style={{ background: `radial-gradient(ellipse at top, ${COLORS.baseDeep}, ${COLORS.base} 70%)` }} />
-       <div className="pointer-events-none absolute -top-1/4 left-1/2 -translate-x-1/2 w-[200%] h-[150%] z-0" style={{ background: "radial-gradient(closest-side, rgba(245, 158, 11, .15), transparent 80%)" }} />
-       
-      <div className="max-w-7xl mx-auto px-4 py-20 lg:py-28 relative z-10 grid lg:grid-cols-2 gap-12 items-center">
-        {/* Left Column: Text Content */}
-        <div className="text-center lg:text-left">
-          <h1 className="text-5xl md:text-6xl font-bold leading-tight tracking-tighter"
-            style={{textShadow: '0 4px 30px rgba(0,0,0,0.4)'}}>
-            Turn Facebook group members into <span style={{color: COLORS.amber}}>customers.</span>
-          </h1>
-          <p className="mt-6 text-lg max-w-xl mx-auto lg:mx-0" style={{ color: COLORS.textDim }}>
-              Auto-capture member approval answers and sync them to Google Sheets, your CRM, and email marketing tools.
-          </p>
-          <div className="mt-8 flex flex-wrap justify-center lg:justify-start gap-4">
-            <Button size="lg" onClick={onCTATrial}>Start 3-Day Free Trial</Button>
-            <Button size="lg" variant="outline" onClick={onCTAPricing}>See Pricing</Button>
-          </div>
-           <div className="mt-8 text-center lg:text-left" style={{ color: COLORS.textDim }}>
-            <div className="flex justify-center lg:justify-start items-center gap-2">
-                {Array.from({length:5}).map((_,s)=> (<Star key={s} size={20} />))}
-            </div>
-            <p className="mt-2">Trusted by over 1,000+ growing communities</p>
-          </div>
-        </div>
+    // FAQ accordion
+    const faqQuestions = document.querySelectorAll('.faq-question');
+    const handleFaqClick = (event) => {
+        const q = event.currentTarget;
+        const answer = q.nextElementSibling;
+        const icon = q.querySelector('svg');
+        if (answer.style.maxHeight) {
+            answer.style.maxHeight = null;
+            icon.style.transform = 'rotate(0deg)';
+        } else {
+            answer.style.maxHeight = answer.scrollHeight + 'px';
+            icon.style.transform = 'rotate(180deg)';
+        }
+    };
+    faqQuestions.forEach(q => q.addEventListener('click', handleFaqClick));
 
-        {/* Right Column: Visual Element */}
-        <div className="relative">
-          <div className="rounded-xl shadow-2xl border" style={{ borderColor: COLORS.border, background: "rgba(15, 33, 64, 0.7)", boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4)' }}>
-            <div className="p-3 border-b flex items-center gap-2" style={{borderColor: COLORS.border}}>
-                <span className="w-3.5 h-3.5 rounded-full" style={{background: "#ff5f56"}}></span>
-                <span className="w-3.5 h-3.5 rounded-full" style={{background: "#ffbd2e"}}></span>
-                <span className="w-3.5 h-3.5 rounded-full" style={{background: "#27c93f"}}></span>
-            </div>
-            <div className="p-4 sm:p-6">
-              <div className="mb-4 text-sm flex items-center gap-2" style={{ color: COLORS.textDim }}><BarChart2 className="w-4 h-4" /> Usage preview</div>
-              <LineChartSVG data={data} lines={[{ key:"emails", color: COLORS.amber, w:2.5 }, { key:"syncs", color: COLORS.blue, w:2 }]}/>
-              <div className="grid sm:grid-cols-3 gap-4 mt-6 text-center">
-                {[
-                  { value: "+28%", label: "Emails Captured" },
-                  { value: "1-click", label: "Integrations" },
-                  { value: "Auto", label: "Syncs" }
-                ].map((stat, i) => (
-                  <div key={i} className="rounded-lg p-3" style={{ background: COLORS.base }}>
-                    <div className="font-bold text-xl">{stat.value}</div>
-                    <div className="text-sm opacity-80">{stat.label}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
+    // Modals
+    const privacyModal = document.getElementById('privacyModal');
+    const termsModal = document.getElementById('termsModal');
+    const openPrivacyBtn = document.getElementById('openPrivacyModal');
+    const openTermsBtn = document.getElementById('openTermsModal');
+    const closePrivacyBtn = document.getElementById('closePrivacyModal');
+    const closeTermsBtn = document.getElementById('closeTermsModal');
 
-/*************************************
- * Marketing sections
- *************************************/
-function HowItWorks(){
-  const steps=[
-    { icon:<Layers className="w-8 h-8" />, title:"Connect Your Group", desc:"Securely link Sheets, CRM, and email in minutes." },
-    { icon:<Database className="w-8 h-8" />, title:"Map Your Fields", desc:"Point-and-click mapping to unify schemas." },
-    { icon:<Icon d="M13 2L3 14h7l-1 8 10-12h-7l1-8z" className="w-8 h-8"/>, title:"Auto-Sync Forever", desc:"Delta updates, alerts, and export on demand." },
-  ];
-  return (
-    <section id="solutions" className="py-20">
-      <div className="max-w-7xl mx-auto px-4">
-        <div className="text-center max-w-3xl mx-auto">
-          <h2 className="text-4xl font-bold" style={{ color: COLORS.text }}>How it Works in 3 Simple Steps</h2>
-          <p className="mt-4 text-lg" style={{ color: COLORS.textDim }}>From first connection to full automation in minutes.</p>
-        </div>
-        <div className="relative mt-16">
-          <div className="absolute top-1/2 -translate-y-1/2 left-0 w-full h-0.5" style={{ background: `linear-gradient(90deg, transparent 0%, ${COLORS.border} 20%, ${COLORS.border} 80%, transparent 100%)` }}/>
-          <div className="grid md:grid-cols-3 gap-8 items-start relative">
-            {steps.map((s,i)=> (
-              <div key={i} className="text-center flex flex-col items-center p-6 rounded-lg backdrop-blur-sm" style={{ background: "rgba(11, 27, 51, 0.5)" }}>
-                <div className="w-24 h-24 rounded-full grid place-items-center mb-6 ring-4 ring-amber-500/30 border-2 border-amber-500/50" style={{ background: COLORS.card, color: COLORS.amber }}>
-                  <div className="absolute -top-3 bg-amber-500 text-slate-900 font-bold px-3 py-1 rounded-full text-sm">Step {i+1}</div>
-                  {s.icon}
-                </div>
-                <h3 className="text-2xl font-semibold" style={{ color: COLORS.text }}>{s.title}</h3>
-                <p className="mt-2" style={{ color: COLORS.textDim }}>{s.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
+    const openPrivacy = () => privacyModal?.classList.remove('hidden');
+    const openTerms = () => termsModal?.classList.remove('hidden');
+    const closePrivacy = () => privacyModal?.classList.add('hidden');
+    const closeTerms = () => termsModal?.classList.add('hidden');
 
-function Integrations(){
-  return (
-    <section id="integrations" className="py-20" style={{ background: COLORS.baseDeep }}>
-      <div className="max-w-7xl mx-auto px-4">
-        <div className="text-center max-w-3xl mx-auto">
-          <h2 className="text-4xl font-bold" style={{ color: COLORS.text }}>Powerful Integrations</h2>
-          <p className="mt-4 text-lg" style={{ color: COLORS.textDim }}>Plug into your stack with zero backend changes.</p>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mt-12">
-          {integrations.map((it,idx)=> (
-            <Card key={idx} className="group hover:-translate-y-2 transition-transform duration-300 hover:shadow-2xl hover:shadow-amber-500/20 hover:border-amber-500/50">
-              <CardContent className="p-8 flex flex-col items-center text-center gap-4">
-                <div className="p-4 rounded-full bg-white/5 flex items-center justify-center h-20 w-20">
-                    {it.icon}
-                </div>
-                <div className="text-xl font-semibold">{it.name}</div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
+    openPrivacyBtn?.addEventListener('click', openPrivacy);
+    openTermsBtn?.addEventListener('click', openTerms);
+    closePrivacyBtn?.addEventListener('click', closePrivacy);
+    closeTermsBtn?.addEventListener('click', closeTerms);
 
-function DocsPage(){
-  return (
-    <section id="docs" className="py-20 relative">
-      <div className="max-w-7xl mx-auto px-4">
-        <div className="text-center max-w-3xl mx-auto">
-          <h2 className="text-4xl font-bold" style={{ color: COLORS.text }}>Get Started in Minutes</h2>
-          <p className="mt-4 text-lg" style={{ color: COLORS.textDim }}>Quick start and integration setup guides.</p>
-        </div>
-        <div className="grid lg:grid-cols-2 gap-8 mt-12">
-          <Card>
-            <CardHeader>
-              <CardTitle>Getting Started</CardTitle>
-              <CardDescription>Create an account, connect a source, and map fields.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <ol className="list-decimal pl-5 space-y-2">
-                <li>Click <strong className="text-amber-400">Login with Facebook</strong> to create your account.</li>
-                <li>Open <strong className="text-amber-400">Integrations</strong> and connect Google Sheets, Mailchimp, or Zapier.</li>
-                <li>Use the <strong className="text-amber-400">Field Mapper</strong> to align inputs to your schema.</li>
-                <li>Enable <strong className="text-amber-400">Auto-Sync</strong> and optionally webhooks.</li>
-              </ol>
-            </CardContent>
-          </Card>
-          <div className="grid gap-8">
-            <Card>
-              <CardContent className="p-6 flex items-start gap-4">
-                <div className="p-3 rounded-lg" style={{backgroundColor: COLORS.baseDeep}}><Database className="w-6 h-6" style={{color: COLORS.blue}}/></div>
-                <div>
-                  <CardTitle className="text-lg">Google Sheets & Mailchimp</CardTitle>
-                  <p className="mt-1 text-sm text-slate-400">Sync join-form rows into a sheet or capture subscribers and tag by answers.</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-6 flex items-start gap-4">
-                <div className="p-3 rounded-lg" style={{backgroundColor: COLORS.baseDeep}}><Icon d="M13 2L3 14h7l-1 8 10-12h-7l1-8z" className="w-6 h-6" style={{color: COLORS.amber}}/></div>
-                <div>
-                  <CardTitle className="text-lg">Zapier & Webhooks</CardTitle>
-                  <p className="mt-1 text-sm text-slate-400">Automate with 6,000+ apps or deliver JSON payloads to your own API.</p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
+    const handleWindowClick = (e) => {
+        if (e.target === privacyModal) privacyModal.classList.add('hidden');
+        if (e.target === termsModal) termsModal.classList.add('hidden');
+    };
+    window.addEventListener('click', handleWindowClick);
 
-/*************************************
- * Pricing
- *************************************/
-const PRICING_TIERS = [
-  { id: "price_starter", name:"Starter", price:"$19", period:"/mo", highlight:false, features:["500 members/mo","Daily sync","CSV export"] },
-  { id: "price_pro", name:"Pro", price:"$39", period:"/mo", highlight:true, features:["2,000 members/mo","Hourly sync","Sheets + Webhook"] },
-  { id: "price_agency", name:"Agency", price:"$99", period:"/mo", highlight:false, features:["5,000 members/mo","15-min sync","Priority support"] },
-];
+    // Cleanup function
+    return () => {
+        if (followerChart) {
+          followerChart.destroy();
+        }
+        faqQuestions.forEach(q => q.removeEventListener('click', handleFaqClick));
+        openPrivacyBtn?.removeEventListener('click', openPrivacy);
+        openTermsBtn?.removeEventListener('click', openTerms);
+        closePrivacyBtn?.removeEventListener('click', closePrivacy);
+        closeTermsBtn?.removeEventListener('click', closeTerms);
+        window.removeEventListener('click', handleWindowClick);
+    };
 
-function Pricing({ onChoosePlan, loggedIn }){
-  return (
-    <section id="pricing" className="py-20" style={{ background: COLORS.baseDeep }}>
-      <div className="max-w-7xl mx-auto px-4">
-        <div className="text-center max-w-3xl mx-auto">
-          <h2 className="text-4xl font-bold" style={{ color: COLORS.text }}>Simple, Predictable Pricing</h2>
-          <p className="mt-4 text-lg" style={{ color: COLORS.textDim }}>Start free, upgrade when you scale. Cancel anytime.</p>
-        </div>
-        <div className="grid md:grid-cols-3 gap-8 mt-12">
-          {PRICING_TIERS.map((t,i)=> (
-            <Card key={i} className={cn("relative flex flex-col", t.highlight && "border-2 border-amber-500")}>
-              {t.highlight && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                  <span className="rounded-full px-4 py-1.5 text-sm font-semibold shadow-md flex items-center gap-2" style={{ background: COLORS.amber, color: COLORS.baseDeep }}>
-                    <Star size={16} fill={COLORS.baseDeep} stroke={COLORS.baseDeep}/> Best Value
-                  </span>
-                </div>
-              )}
-              <CardHeader className="text-center">
-                <CardTitle className="text-2xl">{t.name}</CardTitle>
-              </CardHeader>
-              <CardContent className="flex-1 flex flex-col">
-                <div className="text-center mb-6">
-                  <span className="text-5xl font-bold">{t.price}</span>
-                  <span className="text-lg opacity-70">{t.period}</span>
-                </div>
-                <ul className="space-y-3 text-base flex-1">
-                  {t.features.map((f,idx)=> (
-                    <li key={idx} className="flex items-center gap-3"><Check className="w-5 h-5 text-green-400" /> {f}</li>
-                  ))}
-                </ul>
-                <Button 
-                  className="w-full mt-8" 
-                  variant={t.highlight ? "solid" : "outline"}
-                  onClick={() => onChoosePlan(t)}
-                >
-                  Choose {t.name}
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/*************************************
- * Security, FAQ, Subscribe
- *************************************/
-function Security(){
-  const items=[
-    { title:"Data Handling", desc:"We minimize data in transit and encrypt all data at rest using industry-standard protocols." },
-    { title:"Access Control", desc:"Granular access controls and role-based permissions to protect sensitive information." },
-    { title:"Compliance Ready", desc:"Audit trails and one-click export for regulators and internal compliance." },
-  ];
-  return (
-    <section id="security" className="py-20">
-        <div className="max-w-7xl mx-auto px-4">
-            <div className="text-center max-w-3xl mx-auto">
-                <h2 className="text-4xl font-bold" style={{ color: COLORS.text }}>Security & Compliance</h2>
-                <p className="mt-4 text-lg" style={{ color: COLORS.textDim }}>Your data's safety is our top priority. We're built with enterprise-grade security from the ground up.</p>
-            </div>
-            <div className="grid md:grid-cols-3 gap-8 mt-12">
-                {items.map((it, i) => (
-                    <Card key={i} className="text-center p-6 hover:-translate-y-2 transition-transform duration-300">
-                        <div className="inline-flex w-16 h-16 rounded-full items-center justify-center mb-6 ring-4 ring-blue-500/20" style={{ background: COLORS.card, color: COLORS.blue }}>
-                            <Lock className="w-8 h-8" />
-                        </div>
-                        <h3 className="text-2xl font-semibold">{it.title}</h3>
-                        <p className="mt-2" style={{ color: COLORS.textDim }}>{it.desc}</p>
-                    </Card>
-                ))}
-            </div>
-        </div>
-    </section>
-  );
-}
-
-function FAQ(){
-  const faqs=[
-    { q:"What does Collexiq do?", a:"It captures Facebook group join-form data (emails, names, answers) and syncs it to your connected tools automatically." },
-    { q:"Is there a free trial?", a:"Yes, you can create an account and explore the dashboard for free. A subscription is required to connect a group and start capturing data." },
-    { q:"Which integrations are supported?", a:"Currently: Google Sheets, Mailchimp, Zapier, and generic Webhook. More coming soon." },
-    { q:"Can I export data?", a:"Yes. You can export a CSV of your captured members anytime with one click." },
-    { q:"How secure is Collexiq?", a:"All data is encrypted in transit (TLS). We practice least-privilege access and comply with standard data protection policies." },
-    { q:"How does billing work?", a:"Billing is handled securely through Stripe. You can manage or cancel your subscription via your Stripe customer portal." },
-  ];
-  
-  const [open, setOpen] = useState(0);
+  }, []); // Empty dependency array ensures this runs only once on mount
 
   return (
-    <section id="faq" className="py-20">
-      <div className="max-w-4xl mx-auto px-4">
-        <div className="text-center">
-            <h2 className="text-4xl font-bold" style={{ color: COLORS.text }}>Frequently Asked Questions</h2>
-        </div>
-        <div className="mt-12 space-y-4">
-            {faqs.map((faq,i) => (
-                <div key={i} className="rounded-xl" style={{ background: COLORS.card, borderColor: COLORS.border, border: `1px solid ${COLORS.border}` }}>
-                    <button onClick={() => setOpen(open === i ? null : i)} className="w-full flex justify-between items-center text-left p-6">
-                        <span className="font-semibold text-lg" style={{color: COLORS.text}}>{faq.q}</span>
-                        <ChevronDown className={cn("w-6 h-6 transition-transform", open === i ? 'rotate-180 text-amber-400' : 'text-slate-400')} />
-                    </button>
-                    <div className={cn("grid transition-all duration-300 ease-in-out", open === i ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0')}>
-                      <div className="overflow-hidden">
-                        <div className="p-6 pt-0" style={{color: COLORS.textDim}}>
-                            <p className="text-base">{faq.a}</p>
-                        </div>
-                      </div>
+    <>
+      <header className="bg-slate-900/70 backdrop-blur-lg fixed top-0 left-0 right-0 z-50 border-b border-slate-700">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between h-16">
+                <div className="flex items-center">
+                    <div className="flex-shrink-0">
+                        <a href="# " className="flex items-center space-x-2">
+                            <svg className="h-8 w-8" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <defs>
+                                    <linearGradient id="logoGradient" x1="0" y1="0" x2="1" y2="1">
+                                        <stop offset="0%" stopColor="#A855F7"></stop>
+                                        <stop offset="100%" stopColor="#EC4899"></stop>
+                                    </linearGradient>
+                                </defs>
+                                <rect width="32" height="32" rx="8" fill="url(#logoGradient)"/>
+                                <circle cx="15" cy="15" r="6" stroke="white" strokeWidth="2.5"/>
+                                <line x1="19.5" y1="19.5" x2="25" y2="25" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
+                            </svg>
+                            <span className="text-2xl font-bold tracking-tight text-white">Collex<span className="gradient-text">IQ</span></span>
+                        </a>
                     </div>
                 </div>
-            ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function Contact() {
-    return (
-        <section id="contact" className="py-20" style={{ background: COLORS.baseDeep }}>
-            <div className="max-w-4xl mx-auto px-4">
-                <div className="text-center">
-                    <h2 className="text-4xl font-bold">Get in Touch</h2>
-                    <p className="mt-4 text-lg" style={{ color: COLORS.textDim }}>
-                        Have a question or feedback? We'd love to hear from you.
-                    </p>
+                <div className="hidden md:block">
+                    <div className="ml-10 flex items-baseline space-x-4">
+                        <a href="#features" className="text-slate-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Features</a>
+                        <a href="#how-it-works" className="text-slate-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">How It Works</a>
+                        <a href="#pricing" className="text-slate-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Pricing</a>
+                    </div>
                 </div>
-                <Card className="mt-12">
-                    <form onSubmit={e => e.preventDefault()}>
-                        <CardContent className="p-8 space-y-6">
-                            <div className="grid md:grid-cols-2 gap-6">
-                                <div>
-                                    <label htmlFor="name" className="text-base font-medium mb-2 block">Full Name</label>
-                                    <Input id="name" type="text" placeholder="John Doe" required />
+                <div className="flex items-center">
+                       <div className="hidden md:block">
+                            <a href="# " className="text-slate-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Log In</a>
+                            <a href="# " className="ml-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white gradient-bg hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-pink-500 transition-all">Get Started Free</a>
+                        </div>
+                    <div className="md:hidden">
+                        <button type="button" className="bg-slate-800 inline-flex items-center justify-center p-2 rounded-md text-slate-300 hover:text-white hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-pink-500" aria-controls="mobile-menu" aria-expanded="false" id="mobile-menu-button">
+                            <span className="sr-only">Open main menu</span>
+                            <svg className="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div className="hidden md:hidden" id="mobile-menu">
+            <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
+                <a href="#features" className="text-slate-300 hover:bg-slate-800 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Features</a>
+                <a href="#how-it-works" className="text-slate-300 hover:bg-slate-800 hover:text-white block px-3 py-2 rounded-md text-base font-medium">How It Works</a>
+                <a href="#pricing" className="text-slate-300 hover:bg-slate-800 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Pricing</a>
+                <a href="# " className="text-slate-300 hover:bg-slate-800 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Log In</a>
+                <a href="# " className="gradient-bg text-white block px-3 py-2 rounded-md text-base font-medium text-center mt-2">Get Started Free</a>
+            </div>
+        </div>
+    </header>
+
+    <main className="pt-16">
+        <div className="section-padding bg-slate-900">
+            <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
+                <div className="relative text-center lg:text-left">
+                    <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-white tracking-tight">
+                        Stop Guessing. Pick <span className="gradient-text">Winning Influencers</span> with Confidence.
+                    </h1>
+                    <p className="mt-6 max-w-xl mx-auto lg:mx-0 text-lg text-slate-300">
+                        Collexiq gives you unbiased, API-verified stats and a powerful <strong className="text-white">Fit Score</strong> to find the perfect Instagram creators for your brand—in minutes, not days.
+                    </p>
+                    <div className="mt-8 flex justify-center lg:justify-start gap-x-4">
+                        <a href="# " className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-lg text-white gradient-bg hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-pink-500 transition-transform hover:scale-105">
+                            Start Vetting for Free
+                        </a>
+                        <a href="#how-it-works" className="inline-flex items-center px-6 py-3 border border-slate-600 text-base font-medium rounded-md text-slate-100 bg-slate-800/50 hover:bg-slate-700 transition-transform hover:scale-105">
+                            How It Works
+                        </a>
+                    </div>
+                    <p className="mt-4 text-sm text-slate-500">No credit card required. 10 free reports.</p>
+                </div>
+                
+                <div>
+                    <div className="p-4 bg-slate-800/50 rounded-2xl shadow-2xl hero-glow ring-1 ring-slate-700">
+                        <div className="bg-slate-900 rounded-lg p-4 flex flex-col gap-3">
+                            <div>
+                                <div className="flex items-center gap-2 p-2 bg-slate-800 rounded-lg ring-1 ring-slate-700">
+                                    <svg className="h-5 w-5 text-cyan-400 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                      <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+                                    </svg>
+                                    <p className="text-sm text-slate-300">
+                                        Search: <span className="text-white font-semibold">'Fitness in NYC'</span>
+                                    </p>
                                 </div>
-                                <div>
-                                    <label htmlFor="email" className="text-base font-medium mb-2 block">Email Address</label>
-                                    <Input id="email" type="email" placeholder="you@example.com" required />
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 lg:items-stretch">
+                                <div className="lg:col-span-2 flex flex-col gap-2">
+                                    <h4 className="text-slate-400 text-xs font-semibold px-1">Shortlist</h4>
+                                    <div className="bg-slate-800/70 p-2.5 rounded-lg ring-1 ring-cyan-500/30 hover-glow">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <p className="font-bold text-white text-sm">Aria Gomez</p>
+                                                <p className="text-xs text-slate-400">@fit.with.aria</p>
+                                            </div>
+                                            <div className="text-xl font-bold gradient-text">91</div>
+                                        </div>
+                                    </div>
+                                    <div className="bg-slate-800/70 p-2.5 rounded-lg ring-1 ring-slate-700 hover-glow">
+                                         <div className="flex items-center justify-between">
+                                            <div>
+                                                <p className="font-bold text-white text-sm">Kai Patel</p>
+                                                <p className="text-xs text-slate-400">@plantplate</p>
+                                            </div>
+                                            <div className="text-xl font-bold text-slate-300">84</div>
+                                        </div>
+                                    </div>
+                                    <div className="bg-slate-800/70 p-2.5 rounded-lg ring-1 ring-slate-700 hover-glow">
+                                         <div className="flex items-center justify-between">
+                                            <div>
+                                                <p className="font-bold text-white text-sm">Mina Lee</p>
+                                                <p className="text-xs text-slate-400">@citythreads</p>
+                                            </div>
+                                            <div className="text-xl font-bold text-slate-300">79</div>
+                                        </div>
+                                    </div>
+                                    <div className="mt-1">
+                                        <a href="# " className="block w-full text-center py-2 bg-slate-700/50 hover:bg-slate-700 transition-colors text-sm font-semibold text-slate-300 rounded-lg hover-glow">
+                                            Compare Shortlist
+                                        </a>
+                                    </div>
+                                </div>
+
+                                <div className="lg:col-span-3 flex flex-col gap-3">
+                                      <div>
+                                        <h4 className="text-slate-400 text-xs font-semibold px-1 mb-1.5">Key Metrics</h4>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div className="bg-slate-800/70 p-2 rounded-lg text-center hover-glow">
+                                                <p className="text-xs text-slate-400">Avg ER</p>
+                                                <p className="text-lg font-bold text-white">4.8%</p>
+                                                <p className="text-xs text-cyan-400">+0.6%</p>
+                                            </div>
+                                            <div className="bg-slate-800/70 p-2 rounded-lg text-center hover-glow">
+                                                <p className="text-xs text-slate-400">Audience Match</p>
+                                                <p className="text-lg font-bold text-white">92%</p>
+                                                <p className="text-xs text-cyan-400">+5%</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="bg-slate-800/70 p-3 rounded-lg flex-grow flex flex-col hover-glow">
+                                        <div className="flex items-center gap-2">
+                                             <svg className="h-4 w-4 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
+                                            </svg>
+                                            <p className="text-sm font-semibold text-white">Follower Growth</p>
+                                        </div>
+                                        <div className="flex-grow relative h-40">
+                                            <canvas id="followerChart"></canvas>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                             <div>
-                                <label htmlFor="message" className="text-base font-medium mb-2 block">Message</label>
-                                <textarea id="message" rows="5" placeholder="Your message..." required className={cn("w-full rounded-lg border-2 p-4 text-base bg-transparent focus:ring-2 focus:ring-amber-500 focus:border-amber-500")} style={{borderColor: COLORS.border}}></textarea>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm text-left mt-2">
+                                        <thead className="text-xs text-slate-400 uppercase">
+                                            <tr>
+                                                <th scope="col" className="py-2 pr-2">Metric</th>
+                                                <th scope="col" className="py-2 px-2 text-center">Aria</th>
+                                                <th scope="col" className="py-2 px-2 text-center">Kai</th>
+                                                <th scope="col" className="py-2 pl-2 text-center">Mina</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="text-white">
+                                            <tr className="border-b border-slate-800">
+                                                <td className="py-2 pr-2 font-semibold">Engagement Rate</td>
+                                                <td className="py-2 px-2 text-center">5.3%</td>
+                                                <td className="py-2 px-2 text-center">4.6%</td>
+                                                <td className="py-2 pl-2 text-center">3.9%</td>
+                                            </tr>
+                                            <tr className="border-b border-slate-800">
+                                                <td className="py-2 pr-2 font-semibold">Audience Match</td>
+                                                <td className="py-2 px-2 text-center">96%</td>
+                                                <td className="py-2 px-2 text-center">88%</td>
+                                                <td className="py-2 pl-2 text-center">80%</td>
+                                            </tr>
+                                            <tr>
+                                                <td className="py-2 pr-2 font-semibold">Brand Safety</td>
+                                                <td className="py-2 px-2 text-center"><span className="bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full text-xs">Green</span></td>
+                                                <td className="py-2 px-2 text-center"><span className="bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full text-xs">Green</span></td>
+                                                <td className="py-2 pl-2 text-center"><span className="bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full text-xs">Amber</span></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
-                             <div className="flex justify-end">
-                                <Button type="submit" size="md">Send Message</Button>
-                            </div>
-                        </CardContent>
-                    </form>
-                </Card>
-            </div>
-        </section>
-    );
-}
-
-/*************************************
- * Footer
- *************************************/
-function Footer({ onScrollTo }) {
-    const links = [
-      {label: "Solutions", id: "solutions"}, 
-      {label: "Pricing", id: "pricing"}, 
-      {label: "Security", id: "security"}, 
-      {label: "FAQ", id: "faq"}, 
-      {label: "Contact", id: "contact"}
-    ];
-    return (
-        <footer className="border-t py-12" style={{ borderColor: COLORS.border }}>
-            <div className="max-w-7xl mx-auto px-4">
-                <div className="flex flex-col md:flex-row justify-between items-center gap-8">
-                    <Logo size={160} />
-                    <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-base">
-                        {links.map(l => <button key={l.id} onClick={() => onScrollTo(l.id)} className="hover:text-amber-400 transition-colors" style={{color: COLORS.textDim}}>{l.label}</button>)}
-                    </div>
-                     <div className="flex items-center gap-6">
-                        <a href="https://twitter.com" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-white transition-colors"><XSocialIcon className="w-5 h-5"/></a>
-                        <a href="https://linkedin.com" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-white transition-colors"><LinkedInIcon className="w-6 h-6"/></a>
-                        <a href="https://facebook.com" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-white transition-colors"><FacebookIcon className="w-6 h-6"/></a>
-                        <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-white transition-colors"><InstagramIcon className="w-6 h-6"/></a>
+                        </div>
                     </div>
                 </div>
-                <div className="mt-8 pt-8 border-t text-center text-base" style={{borderColor: COLORS.border, color: COLORS.textDim, opacity: 0.7}}>
-                    &copy; {new Date().getFullYear()} CollexIQ, Inc. All rights reserved.
+            </div>
+        </div>
+
+        <section id="how-it-works" className="section-padding bg-slate-900/50">
+            <div className="max-w-xl mx-auto text-center">
+                <h2 className="text-3xl font-extrabold text-white sm:text-4xl">From Chaos to Clarity in 3 Simple Steps</h2>
+                <p className="mt-4 text-lg text-slate-300">Get from influencer discovery to data-driven decision in record time.</p>
+            </div>
+            <div className="mt-12 max-w-5xl mx-auto grid gap-8 md:grid-cols-3">
+                <div className="text-center p-8 bg-slate-800 rounded-xl shadow-lg border border-slate-700 hover-glow">
+                    <div className="flex items-center justify-center h-16 w-16 rounded-full bg-purple-500/20 mx-auto">
+                        <svg className="h-8 w-8 text-purple-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+                    </div>
+                    <h3 className="mt-6 text-xl font-bold text-white">1. Connect Creators Securely</h3>
+                    <p className="mt-2 text-base text-slate-400">Invite creators with a unique link. They authorize via Instagram's official API in one click. No passwords exchanged, ever.</p>
+                </div>
+                <div className="text-center p-8 bg-slate-800 rounded-xl shadow-lg border border-slate-700 hover-glow">
+                    <div className="flex items-center justify-center h-16 w-16 rounded-full bg-pink-500/20 mx-auto">
+                        <svg className="h-8 w-8 text-pink-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                    </div>
+                    <h3 className="mt-6 text-xl font-bold text-white">2. Analyze Verified Insights</h3>
+                    <p className="mt-2 text-base text-slate-400">We instantly fetch real-time performance data—audience demographics, engagement rates, growth trends, and more.</p>
+                </div>
+                <div className="text-center p-8 bg-slate-800 rounded-xl shadow-lg border border-slate-700 hover-glow">
+                    <div className="flex items-center justify-center h-16 w-16 rounded-full bg-cyan-500/20 mx-auto">
+                         <svg className="h-8 w-8 text-cyan-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    </div>
+                    <h3 className="mt-6 text-xl font-bold text-white">3. Decide with Data</h3>
+                    <p className="mt-2 text-base text-slate-400">Use the Fit Score™, side-by-side comparisons, and one-click PDF reports to select the best creators for your campaign.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="features" className="section-padding bg-slate-900">
+            <div className="max-w-xl mx-auto text-center">
+                <h2 className="text-3xl font-extrabold text-white sm:text-4xl">The Tools You Need for Smarter Vetting</h2>
+                <p className="mt-4 text-lg text-slate-300">Everything you need to move from discovery to decision with absolute confidence.</p>
+            </div>
+            <div className="mt-12 max-w-7xl mx-auto grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+                <div className="p-6 bg-slate-800 rounded-lg border border-slate-700 flex items-start space-x-4 hover-glow">
+                    <div className="flex-shrink-0 h-10 w-10 rounded-lg bg-purple-500/20 flex items-center justify-center"><svg className="h-6 w-6 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg></div>
+                    <div>
+                        <h3 className="font-bold text-white">The Collexiq Fit Score™</h3>
+                        <p className="mt-1 text-slate-400">Our proprietary score instantly tells you how well a creator aligns with your brand.</p>
+                    </div>
+                </div>
+                <div className="p-6 bg-slate-800 rounded-lg border border-slate-700 flex items-start space-x-4 hover-glow">
+                    <div className="flex-shrink-0 h-10 w-10 rounded-lg bg-pink-500/20 flex items-center justify-center"><svg className="h-6 w-6 text-pink-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg></div>
+                    <div>
+                        <h3 className="font-bold text-white">Trustable Profile Cards</h3>
+                        <p className="mt-1 text-slate-400">Get a complete, unbiased view with API-verified data: follower growth, real ER, and demographics.</p>
+                    </div>
+                </div>
+                <div className="p-6 bg-slate-800 rounded-lg border border-slate-700 flex items-start space-x-4 hover-glow">
+                    <div className="flex-shrink-0 h-10 w-10 rounded-lg bg-cyan-500/20 flex items-center justify-center"><svg className="h-6 w-6 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 9l4-4 4 4m0 6l-4 4-4-4" /></svg></div>
+                    <div>
+                        <h3 className="font-bold text-white">Side-by-Side Comparisons</h3>
+                        <p className="mt-1 text-slate-400">Shortlist candidates and compare them head-to-head on key metrics to easily spot the top performer.</p>
+                    </div>
+                </div>
+                 <div className="p-6 bg-slate-800 rounded-lg border border-slate-700 flex items-start space-x-4 hover-glow">
+                    <div className="flex-shrink-0 h-10 w-10 rounded-lg bg-purple-500/20 flex items-center justify-center"><svg className="h-6 w-6 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg></div>
+                    <div>
+                        <h3 className="font-bold text-white">One-Click Reporting</h3>
+                        <p className="mt-1 text-slate-400">Instantly generate a shareable link or a branded PDF report. Perfect for clients and stakeholders.</p>
+                    </div>
+                </div>
+                 <div className="p-6 bg-slate-800 rounded-lg border border-slate-700 flex items-start space-x-4 hover-glow">
+                    <div className="flex-shrink-0 h-10 w-10 rounded-lg bg-pink-500/20 flex items-center justify-center"><svg className="h-6 w-6 text-pink-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div>
+                    <div>
+                        <h3 className="font-bold text-white">Fraud & Quality Flags</h3>
+                        <p className="mt-1 text-slate-400">Our heuristics automatically flag suspicious activity with a simple Green/Amber/Red badge.</p>
+                    </div>
+                </div>
+                 <div className="p-6 bg-slate-800 rounded-lg border border-slate-700 flex items-start space-x-4 hover-glow">
+                    <div className="flex-shrink-0 h-10 w-10 rounded-lg bg-cyan-500/20 flex items-center justify-center"><svg className="h-6 w-6 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg></div>
+                    <div>
+                        <h3 className="font-bold text-white">Deep Performance Snapshots</h3>
+                        <p className="mt-1 text-slate-400">Track recent performance (30/90 days) including reach, impressions, saves, and reel completion rates.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section className="section-padding bg-slate-900/50">
+            <div className="max-w-5xl mx-auto grid lg:grid-cols-2 gap-12 items-center">
+                <div className="text-center lg:text-left">
+                    <h2 className="text-3xl font-extrabold text-white sm:text-4xl">What's Inside the Fit Score™?</h2>
+                    <p className="mt-4 text-lg text-slate-300">Our transparent, weighted algorithm gives you a holistic view of a creator's value to your brand.</p>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-slate-800/50 rounded-lg p-4 flex items-start gap-4">
+                        <div className="flex-shrink-0 h-10 w-10 rounded-lg bg-purple-500/20 flex items-center justify-center"><svg className="h-6 w-6 text-purple-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m-7.5-2.962A3 3 0 013 10.5V18a3 3 0 01-3-3v-2.25m15 5.25v-2.25m-15 0a3 3 0 013-3H6a3 3 0 013 3v2.25m0 0a3 3 0 013-3h3a3 3 0 013 3v2.25" /></svg></div>
+                        <div><h4 className="font-semibold text-white">Audience Match</h4><p className="text-purple-400 font-bold">35%</p></div>
+                    </div>
+                    <div className="bg-slate-800/50 rounded-lg p-4 flex items-start gap-4">
+                        <div className="flex-shrink-0 h-10 w-10 rounded-lg bg-pink-500/20 flex items-center justify-center"><svg className="h-6 w-6 text-pink-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" /></svg></div>
+                        <div><h4 className="font-semibold text-white">Engagement</h4><p className="text-pink-400 font-bold">25%</p></div>
+                    </div>
+                    <div className="bg-slate-800/50 rounded-lg p-4 flex items-start gap-4">
+                        <div className="flex-shrink-0 h-10 w-10 rounded-lg bg-cyan-500/20 flex items-center justify-center"><svg className="h-6 w-6 text-cyan-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" /></svg></div>
+                        <div><h4 className="font-semibold text-white">Growth</h4><p className="text-cyan-400 font-bold">15%</p></div>
+                    </div>
+                    <div className="bg-slate-800/50 rounded-lg p-4 flex items-start gap-4">
+                        <div className="flex-shrink-0 h-10 w-10 rounded-lg bg-amber-500/20 flex items-center justify-center"><svg className="h-6 w-6 text-amber-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0h18M12 12.75h.008v.008H12v-.008z" /></svg></div>
+                        <div><h4 className="font-semibold text-white">Consistency</h4><p className="text-amber-400 font-bold">15%</p></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="pricing" className="section-padding bg-slate-900">
+            <div className="max-w-xl mx-auto text-center">
+                <h2 className="text-3xl font-extrabold text-white sm:text-4xl">Simple, Scalable Pricing</h2>
+                <p className="mt-4 text-lg text-slate-300">Choose the plan that's right for you. Cancel anytime.</p>
+            </div>
+            <div className="mt-12 max-w-5xl mx-auto grid gap-8 lg:grid-cols-3 items-stretch">
+                <div className="bg-slate-800/50 rounded-xl p-8 border border-slate-700 hover-glow flex flex-col">
+                    <div className="flex-grow">
+                        <h3 className="text-xl font-bold text-cyan-400">Starter</h3>
+                        <p className="mt-2 text-slate-400">Perfect for small businesses and single brands.</p>
+                        <p className="mt-6"><span className="text-4xl font-extrabold text-white">$19</span> <span className="text-base font-medium text-slate-400">/ mo</span></p>
+                    </div>
+                    <div className="mt-8">
+                        <a href="# " className="block w-full bg-slate-700 text-white text-center py-3 rounded-md font-semibold hover:bg-slate-600 transition-all">Choose Starter</a>
+                        <ul className="mt-8 space-y-4 text-slate-300 text-left">
+                            <li className="flex items-start"><svg className="flex-shrink-0 h-6 w-6 text-cyan-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>10 Creator Reports / mo</li>
+                            <li className="flex items-start"><svg className="flex-shrink-0 h-6 w-6 text-cyan-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>2 Projects</li>
+                            <li className="flex items-start"><svg className="flex-shrink-0 h-6 w-6 text-cyan-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>Basic PDF Exports</li>
+                            <li className="flex items-start"><svg className="flex-shrink-0 h-6 w-6 text-cyan-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>Fit Score™ & Verified Stats</li>
+                        </ul>
+                    </div>
+                </div>
+                <div className="bg-slate-800 rounded-xl p-8 relative shadow-2xl gradient-border hover-glow transform lg:scale-105 flex flex-col">
+                     <p className="absolute top-0 -translate-y-1/2 gradient-bg text-white text-xs font-semibold tracking-wide uppercase px-3 py-1 rounded-full">Most Popular</p>
+                    <div className="flex-grow">
+                        <h3 className="text-xl font-bold gradient-text">Pro</h3>
+                        <p className="mt-2 text-slate-400">For marketers and small agencies managing multiple campaigns.</p>
+                        <p className="mt-6"><span className="text-4xl font-extrabold text-white">$59</span> <span className="text-base font-medium text-slate-400">/ mo</span></p>
+                    </div>
+                    <div className="mt-8">
+                        <a href="# " className="block w-full gradient-bg text-white text-center py-3 rounded-md font-semibold hover:opacity-90 transition-all">Choose Pro</a>
+                        <ul className="mt-8 space-y-4 text-slate-300 text-left">
+                            <li className="flex items-start"><svg className="flex-shrink-0 h-6 w-6 text-cyan-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>50 Creator Reports / mo</li>
+                            <li className="flex items-start"><svg className="flex-shrink-0 h-6 w-6 text-cyan-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>10 Projects</li>
+                            <li className="flex items-start"><svg className="flex-shrink-0 h-6 w-6 text-cyan-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>Compare up to 5 Creators</li>
+                            <li className="flex items-start"><svg className="flex-shrink-0 h-6 w-6 text-cyan-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>Custom Logo on PDFs</li>
+                            <li className="flex items-start"><svg className="flex-shrink-0 h-6 w-6 text-cyan-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>Shareable Report Links</li>
+                        </ul>
+                    </div>
+                </div>
+                 <div className="bg-slate-800/50 rounded-xl p-8 border border-slate-700 hover-glow flex flex-col">
+                    <div className="flex-grow">
+                        <h3 className="text-xl font-bold text-cyan-400">Agency</h3>
+                        <p className="mt-2 text-slate-400">For agencies and teams that need scale and power.</p>
+                        <p className="mt-6"><span className="text-4xl font-extrabold text-white">$199</span> <span className="text-base font-medium text-slate-400">/ mo</span></p>
+                    </div>
+                    <div className="mt-8">
+                        <a href="# " className="block w-full bg-slate-700 text-white text-center py-3 rounded-md font-semibold hover:bg-slate-600 transition-all">Contact Us</a>
+                        <ul className="mt-8 space-y-4 text-slate-300 text-left">
+                            <li className="flex items-start"><svg className="flex-shrink-0 h-6 w-6 text-cyan-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>200+ Creator Reports</li>
+                            <li className="flex items-start"><svg className="flex-shrink-0 h-6 w-6 text-cyan-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>Unlimited Projects</li>
+                            <li className="flex items-start"><svg className="flex-shrink-0 h-6 w-6 text-cyan-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>Team Seats</li>
+                            <li className="flex items-start"><svg className="flex-shrink-0 h-6 w-6 text-cyan-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>API Export</li>
+                            <li className="flex items-start"><svg className="flex-shrink-0 h-6 w-6 text-cyan-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>Priority Support (SLA)</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="faq" className="section-padding bg-slate-900/50">
+            <div className="max-w-3xl mx-auto text-center">
+                <h2 className="text-3xl font-extrabold text-white sm:text-4xl">Frequently Asked Questions</h2>
+                <p className="mt-4 text-lg text-slate-300">Have questions? We've got answers. If you don't see what you're looking for, feel free to contact us.</p>
+            </div>
+            <div className="mt-12 max-w-3xl mx-auto space-y-4">
+                <div className="bg-slate-800 rounded-lg">
+                    <button className="faq-question w-full flex justify-between items-center text-left p-6">
+                        <span className="text-lg font-semibold text-white">How is the Fit Score™ calculated?</span>
+                        <svg className="w-6 h-6 text-slate-400 transform transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                    </button>
+                    <div className="faq-answer px-6 pb-6">
+                        <p className="text-slate-400">The Fit Score™ blends Audience Match (35%), Engagement (25%), Growth (15%), Consistency (15%), and Relevance (10%) into one transparent score.</p>
+                    </div>
+                </div>
+                <div className="bg-slate-800 rounded-lg">
+                    <button className="faq-question w-full flex justify-between items-center text-left p-6">
+                        <span className="text-lg font-semibold text-white">Is the data from Instagram accurate?</span>
+                        <svg className="w-6 h-6 text-slate-400 transform transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                    </button>
+                    <div className="faq-answer px-6 pb-6">
+                        <p className="text-slate-400">Yes. We use the official Instagram Graph API with creator consent—no scraping—so numbers are verified and up-to-date.</p>
+                    </div>
+                </div>
+                <div className="bg-slate-800 rounded-lg">
+                    <button className="faq-question w-full flex justify-between items-center text-left p-6">
+                        <span className="text-lg font-semibold text-white">Can I cancel anytime?</span>
+                        <svg className="w-6 h-6 text-slate-400 transform transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                    </button>
+                    <div className="faq-answer px-6 pb-6">
+                        <p className="text-slate-400">Absolutely. Cancel monthly plans whenever you like; access persists through the current billing cycle.</p>
+                    </div>
+                </div>
+                <div className="bg-slate-800 rounded-lg">
+                    <button className="faq-question w-full flex justify-between items-center text-left p-6">
+                        <span className="text-lg font-semibold text-white">How do you ensure creator privacy?</span>
+                        <svg className="w-6 h-6 text-slate-400 transform transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                    </button>
+                    <div className="faq-answer px-6 pb-6">
+                        <p className="text-slate-400">Access is consent-based via OAuth. Creators can revoke at any time. We never store passwords.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section className="section-padding">
+            <div className="max-w-3xl mx-auto text-center">
+                <h2 className="text-3xl font-extrabold text-white sm:text-4xl">Ready to Build Your Most Successful Influencer Campaign Yet?</h2>
+                <p className="mt-4 text-lg text-slate-300">Stop wasting time and money on the wrong creators. Get the verified data and clear insights you need to drive real results.</p>
+                <a href="# " className="mt-8 inline-flex items-center px-8 py-4 border border-transparent text-lg font-medium rounded-md shadow-lg text-white gradient-bg hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-pink-500 transition-transform hover:scale-105">
+                    Get Started with 10 Free Reports
+                </a>
+            </div>
+        </section>
+
+        <footer className="bg-slate-900 border-t border-slate-700">
+            <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+                    <div className="col-span-2 md:col-span-1">
+                        <div className="flex items-center space-x-2">
+                             <svg className="h-8 w-8" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <defs>
+                                    <linearGradient id="logoGradientFooter" x1="0" y1="0" x2="1" y2="1">
+                                        <stop offset="0%" stopColor="#A855F7"></stop>
+                                        <stop offset="100%" stopColor="#EC4899"></stop>
+                                    </linearGradient>
+                                </defs>
+                                 <rect width="32" height="32" rx="8" fill="url(#logoGradientFooter)"/>
+                                 <circle cx="15" cy="15" r="6" stroke="white" strokeWidth="2.5"/>
+                                 <line x1="19.5" y1="19.5" x2="25" y2="25" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
+                            </svg>
+                            <span className="text-2xl font-bold text-white">Collex<span className="gradient-text">IQ</span></span>
+                        </div>
+                        <p className="mt-2 text-sm text-slate-400">© 2025 CollexIQ.com. All rights reserved.</p>
+                    </div>
+                    <div>
+                        <h4 className="text-sm font-semibold text-slate-200 tracking-wider uppercase">Links</h4>
+                        <ul className="mt-4 space-y-2 text-slate-400">
+                            <li><a href="#features" className="hover:text-white">Features</a></li>
+                            <li><a href="#pricing" className="hover:text-white">Pricing</a></li>
+                            <li><a href="#how-it-works" className="hover:text-white">How It Works</a></li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 className="text-sm font-semibold text-slate-200 tracking-wider uppercase">Resources</h4>
+                        <ul className="mt-4 space-y-2 text-slate-400">
+                            <li><a href="# " className="hover:text-white">Blog</a></li>
+                            <li><a href="# " className="hover:text-white">Case Studies</a></li>
+                            <li><a href="# " className="hover:text-white">Free Tools</a></li>
+                        </ul>
+                    </div>
+                     <div>
+                        <h4 className="text-sm font-semibold text-slate-200 tracking-wider uppercase">Company</h4>
+                        <ul className="mt-4 space-y-2 text-slate-400">
+                            <li><a href="# " className="hover:text-white">About Us</a></li>
+                            <li><a href="# " className="hover:text-white">Contact</a></li>
+                            <li><button id="openPrivacyModal" className="hover:text-white text-left">Privacy Policy</button></li>
+                            <li><button id="openTermsModal" className="hover:text-white text-left">Terms of Service</button></li>
+                        </ul>
+                    </div>
                 </div>
             </div>
         </footer>
-    );
-}
 
-/*************************************
- * Reviews
- *************************************/
-function Reviews(){
-  return (
-    <section id="reviews" className="py-20">
-      <div className="max-w-7xl mx-auto px-4">
-        <div className="text-center max-w-3xl mx-auto">
-            <h2 className="text-4xl font-bold" style={{ color: COLORS.text }}>Loved by Growing Teams</h2>
-            <p className="mt-4 text-lg" style={{ color: COLORS.textDim }}>See why teams at fast-growing companies trust CollexIQ to automate their workflows.</p>
-        </div>
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mt-12">
-          {testimonials.map((t,i)=> (
-            <Card key={i} className="flex flex-col">
-              <CardContent className="p-8 flex-1 flex flex-col">
-                <div className="flex-1">
-                    <div className="flex items-center gap-1 mb-4">
-                        {Array.from({length:5}).map((_,s)=> (<Star key={s} size={20} />))}
-                    </div>
-                    <p className="text-lg leading-relaxed" style={{ color: COLORS.text }}>“{t.quote}”</p>
+        <div id="privacyModal" className="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-8 relative">
+                <button id="closePrivacyModal" className="absolute top-4 right-4 text-slate-400 hover:text-white">&times;</button>
+                <div className="prose prose-dark lg:prose-xl mx-auto">
+                    <h1>Privacy Policy for CollexIQ</h1>
+                    <p className="text-slate-400">Last updated: September 25, 2025</p>
+                    <p>We are committed to protecting your personal information and your right to privacy. If you have any questions about this notice or our practices, contact us.</p>
                 </div>
-                <div className="mt-6 pt-6 border-t" style={{ borderColor: COLORS.border }}>
-                    <div className="flex items-center gap-4">
-                        <img src={t.img} alt={t.name+" avatar"} className="w-14 h-14 rounded-full object-cover ring-2 ring-amber-500/50" />
-                        <div>
-                            <div className="font-semibold text-lg" style={{ color: COLORS.text }}>{t.name}</div>
-                            <div className="text-base" style={{ color: COLORS.textDim }}>{t.role}</div>
-                        </div>
-                    </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+            </div>
         </div>
-      </div>
-    </section>
+
+        <div id="termsModal" className="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-8 relative">
+                <button id="closeTermsModal" className="absolute top-4 right-4 text-slate-400 hover:text-white">&times;</button>
+                <div className="prose prose-dark lg:prose-xl mx-auto">
+                    <h1>Terms and Conditions</h1>
+                    <p className="text-slate-400">Last updated: September 25, 2025</p>
+                    <p>By using our services, you agree to be bound by these Terms.</p>
+                </div>
+            </div>
+        </div>
+    </main>
+    </>
   );
 }
 
-/*************************************
- * Payment Success Page
- *************************************/
-function PaymentSuccessPage({ onGoToDashboard }) {
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            onGoToDashboard();
-        }, 3000); // 3-second delay
-        return () => clearTimeout(timer);
-    }, [onGoToDashboard]);
-
-    return (
-        <div className="flex flex-col items-center justify-center text-center py-40 max-w-2xl mx-auto">
-            <div className="w-24 h-24 rounded-full bg-green-500/20 flex items-center justify-center mb-8 ring-4 ring-green-500/30">
-                <Check className="w-12 h-12 text-green-400" />
-            </div>
-            <h1 className="text-4xl font-bold">Payment Successful!</h1>
-            <p className="mt-4 text-lg" style={{color: COLORS.textDim}}>
-                Thank you for your purchase. Your account has been upgraded. You will be redirected to your dashboard shortly.
-            </p>
-        </div>
-    );
-}
-
-
-/*************************************
- * Dashboard (after login)
- *************************************/
-function exportToCSV(data, filename) {
-    const csvRows = [];
-    const headers = Object.keys(data[0]);
-    csvRows.push(headers.join(','));
-    for (const row of data) {
-        const values = headers.map(header => `"${(''+row[header]).replace(/"/g, '""')}"`);
-        csvRows.push(values.join(','));
-    }
-    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.setAttribute('href', url);
-    a.setAttribute('download', filename);
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-}
-
-function Dashboard({ user }) {
-    const dashData = useMemo(()=> makeDashData(), []);
-    const [activeTab, setActiveTab] = useState('Dashboard');
-    
-    const dashboardIntegrations = [
-      { name: "Google Sheets", icon: <GoogleSheetsIcon className="w-6 h-6" />, status: "Connected" },
-      { name: "Mailchimp", icon: <MailchimpIcon className="w-6 h-6" />, status: "Connected" },
-      { name: "Zapier", icon: <ZapierIcon className="w-6 h-6" />, status: "Error" },
-      { name: "Webhook", icon: <WebhookIcon className="w-6 h-6" />, status: "Connected" },
-    ];
-    
-    const tabs = [
-        { label: "Dashboard", icon: <LayoutDashboard className="w-5 h-5"/> },
-        { label: "Integrations", icon: <Zap className="w-5 h-5"/> },
-        { label: "Billing", icon: <CreditCard className="w-5 h-5"/> },
-        { label: "Settings", icon: <Settings className="w-5 h-5"/> },
-    ];
-
-    const renderContent = () => {
-        switch(activeTab) {
-            case 'Dashboard':
-                return (
-                    <div className="space-y-8">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Captured Emails Over Time</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <LineChartSVG data={dashData} lines={[{ key:"emails", color: COLORS.amber, w:2.5 }]} maxYValue={160}/>
-                            </CardContent>
-                        </Card>
-                        <div className="grid lg:grid-cols-2 gap-8">
-                            <Card>
-                                <CardHeader className="flex flex-row justify-between items-center">
-                                    <CardTitle>Recent Captures</CardTitle>
-                                    <Button onClick={() => exportToCSV(recentCaptures, 'captures.csv')} size="sm" variant="outline"><FileDown className="w-4 h-4 mr-2"/> Export</Button>
-                                </CardHeader>
-                                <CardContent>
-                                    <ul className="space-y-2">
-                                        {recentCaptures.map(c => (
-                                            <li key={c.email} className="p-3 rounded-lg text-base flex justify-between items-center" style={{backgroundColor: COLORS.base}}>
-                                                <span>{c.email}</span>
-                                                <span className="text-sm opacity-60">{c.date}</span>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </CardContent>
-                            </Card>
-                            <div className="space-y-8">
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle>Current Plan</CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="flex items-center justify-between">
-                                        <p className="text-2xl font-semibold">{user.plan || 'Free'}</p>
-                                        <Button variant="solid" size="sm" onClick={() => document.getElementById('pricing')?.scrollIntoView()}>Upgrade</Button>
-                                    </CardContent>
-                                </Card>
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle>Integrations Status</CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="space-y-3">
-                                    {dashboardIntegrations.map(it => (
-                                        <div key={it.name} className="flex items-center justify-between">
-                                            <div className="flex items-center gap-3">
-                                                {it.icon}
-                                                <span className="font-medium">{it.name}</span>
-                                            </div>
-                                            <div className={cn("text-xs font-semibold px-2.5 py-1 rounded-full", it.status==="Error"?"bg-red-500/20 text-red-300":"bg-green-500/20 text-green-300")}>{it.status}</div>
-                                        </div>
-                                    ))}
-                                    </CardContent>
-                                </Card>
-                            </div>
-                        </div>
-                    </div>
-                );
-            case 'Integrations':
-            case 'Billing':
-            case 'Settings':
-                return (
-                    <Card>
-                        <CardContent className="p-20 text-center">
-                            <h3 className="text-2xl font-bold">{activeTab}</h3>
-                            <p className="text-slate-400 mt-2">This section is coming soon.</p>
-                        </CardContent>
-                    </Card>
-                );
-            default:
-                return null;
-        }
-    }
-
-    return (
-      <main id="dashboard" className="py-12 px-4 max-w-7xl mx-auto">
-        <div className="flex flex-col md:flex-row items-baseline justify-between gap-4 mb-8">
-            <div>
-                <h1 className="text-4xl font-bold">Welcome, {user.name.split(' ')[0]}!</h1>
-                <p className="text-slate-400 mt-1">Here's an overview of your account.</p>
-            </div>
-            <div className="p-1 rounded-lg flex items-center space-x-1" style={{backgroundColor: COLORS.card}}>
-                {tabs.map(tab => (
-                    <button 
-                        key={tab.label}
-                        onClick={() => setActiveTab(tab.label)}
-                        className={cn("flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold transition-colors",
-                            activeTab === tab.label ? 'bg-amber-500 text-slate-900' : 'text-slate-300 hover:bg-white/5'
-                        )}
-                    >
-                        {tab.icon} {tab.label}
-                    </button>
-                ))}
-            </div>
-        </div>
-        {renderContent()}
-      </main>
-    );
-}
-
-/*************************************
- * Main App
- *************************************/
-export default function App() {
-    const [loggedIn, setLoggedIn] = useState(false);
-    const [user, setUser] = useState(null);
-    const [showDashboard, setShowDashboard] = useState(false);
-    const [showBackToTop, setShowBackToTop] = useState(false);
-    const [view, setView] = useState('home'); // home, dashboard, payment_success
-
-    const scrollTo = useScrollTo();
-
-    const handleLogin = () => {
-        window.location.href = `${BACKEND_URL}/api/facebook/login`;
-    };
-
-    const handleLogout = () => {
-        localStorage.removeItem('collexiq_user');
-        setLoggedIn(false);
-        setUser(null);
-        setShowDashboard(false);
-        setView('home');
-        window.history.replaceState({}, document.title, window.location.pathname);
-    };
-
-    const handleOpenDashboard = () => {
-        if (loggedIn) {
-            setShowDashboard(true);
-            setView('dashboard');
-        } else {
-            handleLogin();
-        }
-    };
-    
-    const handleNavAndScroll = (id) => {
-        setShowDashboard(false);
-        setView('home');
-        setTimeout(() => scrollTo(id), 50);
-    };
-    
-    const handleChoosePlan = async (plan) => {
-        if (!loggedIn || !user) {
-            // If user is not logged in, prompt them to login first.
-            // You can store the selected plan and redirect after login.
-            alert("Please log in first to choose a plan.");
-            return;
-        }
-        
-        try {
-            const response = await fetch(`${BACKEND_URL}/api/create-checkout-session`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ planId: plan.id, userId: user.id, planName: plan.name }),
-            });
-            const session = await response.json();
-            if (session.url) {
-                window.location.href = session.url;
-            }
-        } catch (error) {
-            console.error("Error creating checkout session:", error);
-            alert("Could not connect to the payment gateway. Please try again later.");
-        }
-    };
-
-    useEffect(() => {
-        // This effect runs once on component mount
-        const urlParams = new URLSearchParams(window.location.search);
-        
-        if (window.location.pathname === '/payment-success') {
-            setView('payment_success');
-            window.history.replaceState({}, document.title, '/');
-        }
-
-        const storedUser = localStorage.getItem('collexiq_user');
-
-        if (urlParams.get('login_success') === 'true') {
-            try {
-                const userData = JSON.parse(decodeURIComponent(urlParams.get('user')));
-                localStorage.setItem('collexiq_user', JSON.stringify(userData));
-                setUser(userData);
-                setLoggedIn(true);
-                setShowDashboard(true);
-                setView('dashboard');
-                window.history.replaceState({}, document.title, window.location.pathname);
-            } catch (e) {
-                console.error("Failed to parse user data from URL", e);
-            }
-        } else if (storedUser) {
-             try {
-                const userData = JSON.parse(storedUser);
-                setUser(userData);
-                setLoggedIn(true);
-            } catch (e) {
-                console.error("Failed to parse user data from localStorage", e);
-                localStorage.removeItem('collexiq_user');
-            }
-        }
-
-        const handleScroll = () => {
-            if (window.scrollY > 300) {
-                setShowBackToTop(true);
-            } else {
-                setShowBackToTop(false);
-            }
-        };
-        window.addEventListener('scroll', handleScroll);
-        
-        document.body.style.backgroundColor = COLORS.base;
-        document.body.style.color = COLORS.text;
-        document.querySelector('html').classList.add('scroll-smooth');
-        document.body.style.fontFamily = "'Inter', sans-serif";
-
-        return () => window.removeEventListener('scroll', handleScroll);
-    }, []);
-
-    const renderCurrentView = () => {
-        if (view === 'payment_success') {
-            return <PaymentSuccessPage onGoToDashboard={handleOpenDashboard} />;
-        }
-        if (showDashboard) {
-            return <Dashboard user={user}/>;
-        }
-        return (
-            <main>
-                <Hero onCTAPricing={() => scrollTo('pricing')} onCTATrial={() => scrollTo('pricing')} />
-                <HowItWorks />
-                <Integrations />
-                <DocsPage />
-                <Reviews />
-                <Pricing onChoosePlan={handleChoosePlan} loggedIn={loggedIn}/>
-                <Security />
-                <FAQ />
-                <Contact />
-            </main>
-        );
-    }
-
-    return (
-        <>
-            <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');`}</style>
-            <div style={{ background: COLORS.base, color: COLORS.text }}>
-                <Header
-                    onScrollTo={scrollTo}
-                    onLogin={handleLogin}
-                    loggedIn={loggedIn}
-                    user={user}
-                    onLogout={handleLogout}
-                    onOpenDashboard={handleOpenDashboard}
-                    showDashboard={showDashboard}
-                    onNavAndScroll={handleNavAndScroll}
-                />
-
-                {renderCurrentView()}
-
-                <Footer onScrollTo={scrollTo} />
-                
-                <button
-                    onClick={() => scrollTo('hero')}
-                    className={cn(
-                        "fixed bottom-6 right-6 z-50 p-3 rounded-full bg-amber-500 text-slate-900 shadow-lg transition-opacity duration-300 hover:bg-amber-400 active:scale-95",
-                        showBackToTop ? "opacity-100" : "opacity-0 pointer-events-none"
-                    )}
-                    aria-label="Back to top"
-                >
-                    <ArrowUp className="w-6 h-6" />
-                </button>
-            </div>
-        </>
-    );
-}
-
+export default App;
