@@ -3,30 +3,27 @@ import Chart from 'chart.js/auto';
 
 function App() {
   useEffect(() => {
-    // This code runs after the component mounts, similar to DOMContentLoaded
+    // This effect hook runs once after the component mounts.
 
-    // Mobile menu toggle
+    // Mobile menu toggle logic
     const menuButton = document.getElementById('mobile-menu-button');
     const mobileMenu = document.getElementById('mobile-menu');
-    if (menuButton && mobileMenu) {
-      const toggleMenu = () => {
+    const toggleMenu = () => {
         const isExpanded = menuButton.getAttribute('aria-expanded') === 'true';
-        menuButton.setAttribute('aria-expanded', !isExpanded);
+        menuButton.setAttribute('aria-expanded', String(!isExpanded));
         mobileMenu.classList.toggle('hidden');
-      };
+    };
+    if (menuButton) {
       menuButton.addEventListener('click', toggleMenu);
-      
-      // Cleanup function to remove event listener
-      return () => menuButton.removeEventListener('click', toggleMenu);
     }
 
-    // HERO LINE CHART (Chart.js)
+    // Chart.js instance for the hero section graph
     const canvas = document.getElementById('followerChart');
     let followerChart = null;
     if (canvas) {
       const ctx = canvas.getContext('2d');
 
-      // Panel gradient plugin
+      // Custom plugin to draw a gradient background on the chart
       const panelBG = {
           id: 'panelBG',
           beforeDraw(chart) {
@@ -129,8 +126,8 @@ function App() {
       });
     }
 
-    // FAQ accordion
-    const faqQuestions = document.querySelectorAll('.faq-question');
+    // FAQ Accordion Logic
+    const faqQuestions = Array.from(document.querySelectorAll('.faq-question'));
     const handleFaqClick = (event) => {
         const q = event.currentTarget;
         const answer = q.nextElementSibling;
@@ -145,7 +142,7 @@ function App() {
     };
     faqQuestions.forEach(q => q.addEventListener('click', handleFaqClick));
 
-    // Modals
+    // Modal Logic
     const privacyModal = document.getElementById('privacyModal');
     const termsModal = document.getElementById('termsModal');
     const openPrivacyBtn = document.getElementById('openPrivacyModal');
@@ -158,10 +155,10 @@ function App() {
     const closePrivacy = () => privacyModal?.classList.add('hidden');
     const closeTerms = () => termsModal?.classList.add('hidden');
 
-    openPrivacyBtn?.addEventListener('click', openPrivacy);
-    openTermsBtn?.addEventListener('click', openTerms);
-    closePrivacyBtn?.addEventListener('click', closePrivacy);
-    closeTermsBtn?.addEventListener('click', closeTerms);
+    if(openPrivacyBtn) openPrivacyBtn.addEventListener('click', openPrivacy);
+    if(openTermsBtn) openTermsBtn.addEventListener('click', openTerms);
+    if(closePrivacyBtn) closePrivacyBtn.addEventListener('click', closePrivacy);
+    if(closeTermsBtn) closeTermsBtn.addEventListener('click', closeTerms);
 
     const handleWindowClick = (e) => {
         if (e.target === privacyModal) privacyModal.classList.add('hidden');
@@ -169,20 +166,23 @@ function App() {
     };
     window.addEventListener('click', handleWindowClick);
 
-    // Cleanup function
+    // Cleanup function to remove event listeners when the component unmounts
     return () => {
+        if (menuButton) {
+            menuButton.removeEventListener('click', toggleMenu);
+        }
         if (followerChart) {
           followerChart.destroy();
         }
         faqQuestions.forEach(q => q.removeEventListener('click', handleFaqClick));
-        openPrivacyBtn?.removeEventListener('click', openPrivacy);
-        openTermsBtn?.removeEventListener('click', openTerms);
-        closePrivacyBtn?.removeEventListener('click', closePrivacy);
-        closeTermsBtn?.removeEventListener('click', closeTerms);
+        if(openPrivacyBtn) openPrivacyBtn.removeEventListener('click', openPrivacy);
+        if(openTermsBtn) openTermsBtn.removeEventListener('click', openTerms);
+        if(closePrivacyBtn) closePrivacyBtn.removeEventListener('click', closePrivacy);
+        if(closeTermsBtn) closeTermsBtn.removeEventListener('click', closeTerms);
         window.removeEventListener('click', handleWindowClick);
     };
 
-  }, []); // Empty dependency array ensures this runs only once on mount
+  }, []); // Empty dependency array ensures this effect runs only once.
 
   return (
     <>
@@ -242,6 +242,7 @@ function App() {
     </header>
 
     <main className="pt-16">
+        {/* All content sections go here, same as before */}
         <div className="section-padding bg-slate-900">
             <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
                 <div className="relative text-center lg:text-left">
@@ -681,3 +682,4 @@ function App() {
 }
 
 export default App;
+
