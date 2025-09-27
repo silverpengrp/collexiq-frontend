@@ -1,13 +1,59 @@
 body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+    font-family: 'Inter', sans-serif;
+    background-color: #0f172a; /* Slate 900 */
+    color: #d1d5db; /* gray-300 */
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
-
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+.gradient-text {
+    background: linear-gradient(to right, #a855f7, #ec4899);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+.gradient-bg {
+    background-image: linear-gradient(to right, #a855f7, #ec4899);
+}
+.gradient-border {
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    border-image: linear-gradient(to right, #a855f7, #ec4899) 1;
+}
+.section-padding {
+    padding: 4rem 1.5rem;
+}
+@media (min-width: 768px) {
+    .section-padding {
+        padding: 6rem 2rem;
+    }
+}
+.hero-glow {
+    box-shadow: 0 0 120px rgba(168, 85, 247, 0.3), 0 0 180px rgba(236, 72, 153, 0.25);
+}
+html {
+    scroll-behavior: smooth;
+}
+.hover-glow {
+    transition: transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
+}
+.hover-glow:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 30px rgba(168, 85, 247, 0.25), 0 0 15px rgba(236, 72, 153, 0.15);
+}
+.prose-dark {
+    color: #9ca3af;
+}
+.prose-dark h1, .prose-dark h2, .prose-dark h3 {
+    color: #ffffff;
+}
+.prose-dark a {
+    color: #60a5fa;
+}
+.prose-dark strong {
+    color: #f3f4f6;
+}
+.faq-answer {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.5s ease-in-out;
 }
